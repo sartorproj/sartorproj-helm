@@ -6,8 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  packages: write
 
 jobs:
   lint:
@@ -88,3 +93,58 @@ jobs:
       - name: Validate rendered templates
         run: |
           helm template sartor . | kubeconform -strict -summary -output json || true
+
+  package:
+    name: Test Chart Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package chart
+        run: |
+          mkdir -p .helm-releases
+          helm package . -d .helm-releases/
+
+      - name: Verify package
+        run: |
+          ls -la .helm-releases/
+          tar -tzf .helm-releases/*.tgz
+
+  push-oci:
+    name: Push to GitHub Container Registry
+    needs: [lint, template, validate, package]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package chart
+        run: |
+          mkdir -p .helm-releases
+          helm package . -d .helm-releases/
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push chart to GitHub Container Registry
+        run: |
+          for chart in .helm-releases/*.tgz; do
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
+          done
+
+      - name: Logout from registry
+        if: always()
+        run: helm registry logout ghcr.io
