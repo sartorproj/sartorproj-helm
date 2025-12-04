@@ -1,0 +1,17 @@
+apiVersion: v2
+name: sartor
+description: A Helm chart for Sartor - Kubernetes resource optimization via GitOps
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - resource-optimization
+  - gitops
+  - autoscaling
+  - cost-optimization
+home: https://github.com/sartorproj/sartor
+sources:
+  - https://github.com/sartorproj/sartor
+maintainers:
+  - name: Sartor Team

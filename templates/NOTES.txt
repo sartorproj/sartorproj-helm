@@ -1,0 +1,101 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+Namespace: {{ include "sartor.namespace" . }}
+
+{{- if .Values.controller.enabled }}
+
+📊 Controller
+   The Sartor controller is running and watching for Tailoring resources.
+   View logs: kubectl logs -n {{ include "sartor.namespace" . }} -l app.kubernetes.io/name=sartor-controller
+{{- end }}
+
+{{- if .Values.server.enabled }}
+
+🌐 Server (API)
+   The Sartor API server is running.
+   {{- if .Values.server.ingress.enabled }}
+   Access the API at:
+   {{- range .Values.server.ingress.hosts }}
+     - http{{ if $.Values.server.ingress.tls }}s{{ end }}://{{ .host }}
+   {{- end }}
+   {{- else }}
+   To access the API locally:
+     kubectl port-forward -n {{ include "sartor.namespace" . }} svc/sartor-server {{ .Values.server.service.port }}:{{ .Values.server.service.port }}
+     Then visit: http://localhost:{{ .Values.server.service.port }}
+   {{- end }}
+{{- end }}
+
+{{- if .Values.ui.enabled }}
+
+🖥️  UI
+   The Sartor UI is running.
+   {{- if .Values.ui.ingress.enabled }}
+   Access the UI at:
+   {{- range .Values.ui.ingress.hosts }}
+     - http{{ if $.Values.ui.ingress.tls }}s{{ end }}://{{ .host }}
+   {{- end }}
+   {{- else }}
+   To access the UI locally:
+     kubectl port-forward -n {{ include "sartor.namespace" . }} svc/sartor-ui {{ .Values.ui.service.port }}:{{ .Values.ui.service.port }}
+     Then visit: http://localhost:{{ .Values.ui.service.port }}
+   {{- end }}
+{{- end }}
+
+📝 Getting Started
+
+1. Create an Atelier resource to configure Sartor:
+
+   kubectl apply -f - <<EOF
+   apiVersion: autoscaling.sartorproj.io/v1alpha1
+   kind: Atelier
+   metadata:
+     name: default
+   spec:
+     prometheus:
+       url: http://prometheus.monitoring:9090
+     gitProvider:
+       type: github
+       secretRef:
+         name: github-token
+         namespace: {{ include "sartor.namespace" . }}
+   EOF
+
+2. Create a FitProfile for your optimization strategy:
+
+   kubectl apply -f - <<EOF
+   apiVersion: autoscaling.sartorproj.io/v1alpha1
+   kind: FitProfile
+   metadata:
+     name: balanced
+     namespace: default
+   spec:
+     strategy: percentile
+     displayName: Balanced
+     parameters:
+       percentile: 95
+       requestsBufferPercent: 15
+       limitsBufferPercent: 25
+   EOF
+
+3. Create a Tailoring to optimize a workload:
+
+   kubectl apply -f - <<EOF
+   apiVersion: autoscaling.sartorproj.io/v1alpha1
+   kind: Tailoring
+   metadata:
+     name: my-app
+     namespace: default
+   spec:
+     target:
+       kind: Deployment
+       name: my-app
+     fitProfileRef:
+       name: balanced
+     writeBack:
+       type: raw
+       repository: github.com/myorg/myrepo
+       path: k8s/deployment.yaml
+   EOF
+
+For more information, visit: https://github.com/sartorproj/sartor

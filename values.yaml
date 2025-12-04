@@ -1,0 +1,248 @@
+# Default values for sartor
+# This is a YAML-formatted file.
+
+# -- Global settings
+global:
+  # -- Namespace to deploy Sartor (created if createNamespace is true)
+  namespace: sartor-system
+  # -- Create the namespace
+  createNamespace: true
+  # -- Image pull secrets for all components
+  imagePullSecrets: []
+  # -- Pod security context for all components
+  podSecurityContext: {}
+  # -- Container security context for all components
+  securityContext: {}
+
+# -- CRD installation settings
+crds:
+  # -- Install CRDs
+  install: true
+  # -- Keep CRDs on chart uninstall
+  keep: true
+
+# -- Controller configuration
+controller:
+  # -- Enable the controller
+  enabled: true
+  # -- Number of replicas
+  replicaCount: 1
+  image:
+    # -- Controller image repository
+    repository: ghcr.io/sartorproj/sartor-controller
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Image tag (defaults to appVersion)
+    tag: ""
+  # -- Service account name
+  serviceAccountName: sartor-controller
+  # -- Controller arguments
+  args:
+    - --metrics-bind-address=:8080
+    - --health-probe-bind-address=:8081
+    - --leader-elect=true
+  # -- Environment variables
+  env:
+    - name: WATCH_NAMESPACE
+      value: ""
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+  # -- Health probe configuration
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  # -- Service configuration
+  service:
+    # -- Service type
+    type: ClusterIP
+    # -- Health port
+    healthPort: 8081
+    # -- Metrics port
+    metricsPort: 8080
+
+# -- Server (API) configuration
+server:
+  # -- Enable the server
+  enabled: true
+  # -- Number of replicas
+  replicaCount: 1
+  image:
+    # -- Server image repository
+    repository: ghcr.io/sartorproj/sartor-server
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Image tag (defaults to appVersion)
+    tag: ""
+  # -- Service account name
+  serviceAccountName: sartor-server
+  # -- Server arguments
+  args:
+    - --addr=0.0.0.0:8080
+    - --enable-cors=true
+  # -- Environment variables
+  env: []
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+  # -- Health probe configuration
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  # -- Service configuration
+  service:
+    # -- Service type
+    type: ClusterIP
+    # -- HTTP port
+    port: 8080
+    # -- Target port
+    targetPort: 8080
+  # -- Ingress configuration
+  ingress:
+    # -- Enable ingress
+    enabled: false
+    # -- Ingress class name
+    className: ""
+    # -- Ingress annotations
+    annotations: {}
+    # -- Ingress hosts
+    hosts:
+      - host: sartor-api.local
+        paths:
+          - path: /
+            pathType: Prefix
+    # -- TLS configuration
+    tls: []
+
+# -- UI configuration
+ui:
+  # -- Enable the UI
+  enabled: true
+  # -- Number of replicas
+  replicaCount: 1
+  image:
+    # -- UI image repository
+    repository: ghcr.io/sartorproj/sartor-ui
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Image tag (defaults to appVersion)
+    tag: ""
+  # -- Environment variables
+  env:
+    - name: VITE_API_URL
+      value: ""  # Will be set via template if server is enabled
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+  # -- Health probe configuration
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 5173
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 5173
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  # -- Service configuration
+  service:
+    # -- Service type
+    type: ClusterIP
+    # -- HTTP port
+    port: 5173
+    # -- Target port
+    targetPort: 5173
+  # -- Ingress configuration
+  ingress:
+    # -- Enable ingress
+    enabled: false
+    # -- Ingress class name
+    className: ""
+    # -- Ingress annotations
+    annotations: {}
+    # -- Ingress hosts
+    hosts:
+      - host: sartor.local
+        paths:
+          - path: /
+            pathType: Prefix
+    # -- TLS configuration
+    tls: []
+
+# -- RBAC configuration
+rbac:
+  # -- Create RBAC resources
+  create: true
+
+# -- Service account configuration
+serviceAccount:
+  # -- Create service accounts
+  create: true
+  # -- Annotations to add to the service accounts
+  annotations: {}
