@@ -1,0 +1,37 @@
+# Pinned digest, HA, scheduling constraints, CRDs managed elsewhere, no metrics.
+crds:
+  install: false
+controller:
+  replicaCount: 2
+  image:
+    tag: "0.1.0"
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  metrics:
+    enabled: false
+  priorityClassName: system-cluster-critical
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: platform
+      effect: NoSchedule
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: sartor-controller
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: sartor-controller
+  rbac:
+    secretNames:
+      - github-token
