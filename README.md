@@ -39,15 +39,15 @@ helm install sartor oci://ghcr.io/sartorproj/charts/sartor --version 0.2.0 -n sa
 
 The chart deploys into the release namespace (`namespaceOverride` changes it). It does not create the namespace; use `--create-namespace`.
 
-### Staging with VictoriaMetrics
+### With VictoriaMetrics
 
 ```yaml
-# values-staging.yaml
+# values-vm.yaml
 controller:
   metrics:
     readerSubjects:
-      - name: vmagent-vmagent      # vmagent's service account
-        namespace: monitoring
+      - name: my-vmagent           # your vmagent service account
+        namespace: my-monitoring
     vmServiceScrape:
       enabled: true
   rbac:
@@ -56,10 +56,10 @@ controller:
 ```
 
 ```bash
-helm install sartor . -n sartor-system --create-namespace -f values-staging.yaml
+helm install sartor . -n sartor-system --create-namespace -f values-vm.yaml
 ```
 
-Then create the Atelier with the vmselect URL. Controller builds with the sartorproj/sartor VictoriaMetrics fix keep the path prefix and the query string (e.g. `extra_label`) on every request:
+Then create the Atelier with your vmselect URL (placeholders below). Controller builds with the sartorproj/sartor VictoriaMetrics fix keep the path prefix and the query string (e.g. `extra_label`) on every request:
 
 ```yaml
 apiVersion: autoscaling.sartorproj.io/v1alpha1
@@ -68,7 +68,7 @@ metadata:
   name: default
 spec:
   prometheus:
-    url: http://vmselect.monitoring:8481/select/0/prometheus?extra_label=cluster=staging-base-cluster
+    url: http://vmselect.my-monitoring.svc:8481/select/0/prometheus?extra_label=cluster=my-cluster
   gitProvider:
     type: github
     secretRef:
@@ -124,6 +124,7 @@ hack/sync-crds.sh ../sartor
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `namespaceOverride` | Namespace to deploy into | release namespace |
+| `clusterDomain` | Cluster DNS domain for fully qualified Service names | `cluster.local` |
 | `global.imagePullSecrets` | Pull secrets for all pods | `[]` |
 | `crds.install` / `crds.keep` | Render CRDs / keep them on uninstall | `true` / `true` |
 | `rbac.create` | Create (Cluster)Roles and bindings | `true` |
@@ -151,8 +152,9 @@ hack/sync-crds.sh ../sartor
 | `server.cors` | `--enable-cors` | `false` |
 | `server.ingress.*` | Server Ingress | disabled |
 | `ui.enabled` | Deploy the UI (requires `server.enabled`) | `false` |
-| `ui.apiUrl` | `SARTOR_API_URL` override | this release's server Service |
-| `ui.apiKeySecret.name` / `key` | Secret for `SARTOR_API_KEY` (needs ingress-level auth) | `""` / `api-key` |
+| `ui.apiUrl` | `SARTOR_API_URL` override | fully qualified server Service |
+| `ui.apiKey.existingSecret` / `existingSecretKey` | Existing Secret for `SARTOR_API_KEY` | `""` / `api-key` |
+| `ui.apiKey.value` | Chart-created Secret for `SARTOR_API_KEY` (prefer `existingSecret`) | `""` |
 | `ui.ingress.*` | UI Ingress | disabled |
 
 See [`values.yaml`](values.yaml) for every option.
@@ -165,9 +167,11 @@ The `sartor-ui` image is nginx-unprivileged and serves the app plus a same-origi
 - a read-only root filesystem, with an emptyDir mounted at `/tmp`;
 - all capabilities dropped.
 
-- **API URL.** The chart sets `SARTOR_API_URL` only when the server Service differs from the image default `http://sartor-server:8080`, for example with another release name or port. `ui.apiUrl` overrides it.
-- **API key.** `ui.apiKeySecret.name`/`key` passes `SARTOR_API_KEY` from a Secret. The proxy then adds the key to every request, so anyone who can reach the UI can use the API with that key.
-- **Authentication.** The UI has no login of its own. **Put ingress-level authentication in front of it** (e.g. oauth2-proxy or your ingress controller's auth) before exposing it, and do not expose the server's own Ingress publicly.
+- **API URL.** `SARTOR_API_URL` is a plain env value on the UI Deployment. The image has no default and answers 502 on `/api/` until the upstream resolves. It defaults to the fully qualified server Service, `http://<fullname>-server.<namespace>.svc.<clusterDomain>:<server.service.port>`, because nginx's runtime resolver skips DNS search domains. Set `clusterDomain` if your cluster doesn't use `cluster.local`, or `ui.apiUrl` to override the URL. Changing it rolls the pod.
+- **API key (optional).** `SARTOR_API_KEY` comes from a Secret through `secretKeyRef`:
+  - `ui.apiKey.existingSecret` and `ui.apiKey.existingSecretKey` reference your own Secret (preferred);
+  - `ui.apiKey.value` makes the chart create one. A `checksum/secret` pod annotation rolls the pod when the value changes.
+- **Access control.** Deploy the UI on a private network or behind an authenticating proxy; the server-side key proxy gives the API to anyone who can reach the UI. **Never expose it publicly**, and never expose the server's own Ingress publicly either.
 
 ## Development
 

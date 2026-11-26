@@ -15,8 +15,9 @@ server:
           - sartor-api.example.com
 ui:
   enabled: true
-  apiKeySecret:
-    name: sartor-ui-api-key
+  apiKey:
+    existingSecret: sartor-ui-api-key
+    existingSecretKey: token
   ingress:
     enabled: true
     className: nginx

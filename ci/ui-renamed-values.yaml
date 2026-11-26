@@ -1,4 +1,4 @@
-# Non-default names: the UI must be pointed at <fullname>-server through SARTOR_API_URL.
+# Non-default names, port and cluster domain: SARTOR_API_URL must follow them.
 fullnameOverride: sartor-staging
 server:
   enabled: true
@@ -6,3 +6,4 @@ server:
     port: 9090
 ui:
   enabled: true
+clusterDomain: cluster.example

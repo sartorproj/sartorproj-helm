@@ -24,8 +24,8 @@ API server
 
 UI
   kubectl port-forward -n {{ $ns }} svc/{{ include "sartor.ui.fullname" . }} {{ .Values.ui.service.port }}
-  The UI has no login of its own{{ if .Values.ui.apiKeySecret.name }} and its proxy adds the API key to every request{{ end }}.
-  Protect it with ingress-level authentication (e.g. oauth2-proxy) before exposing it.
+  Deploy the UI on a private network or behind an authenticating proxy; the server-side key proxy
+  gives the API to anyone who can reach the UI. Never expose it publicly.
 {{- end }}
 
 Next steps
@@ -38,7 +38,7 @@ Next steps
        name: default
      spec:
        prometheus:
-         url: http://vmselect.monitoring:8481/select/0/prometheus
+         url: http://vmselect.my-monitoring.svc:8481/select/0/prometheus
        gitProvider:
          type: github
          secretRef:

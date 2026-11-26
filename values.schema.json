@@ -121,6 +121,7 @@
     "nameOverride": { "type": "string" },
     "fullnameOverride": { "type": "string" },
     "namespaceOverride": { "type": "string" },
+    "clusterDomain": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
     "global": {
       "type": "object",
       "properties": {
@@ -262,12 +263,13 @@
         "replicaCount": true,
         "image": { "$ref": "#/definitions/image" },
         "apiUrl": { "type": "string", "pattern": "^$|^https?://[^/]+$" },
-        "apiKeySecret": {
+        "apiKey": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "name": { "type": "string" },
-            "key": { "type": "string", "minLength": 1 }
+            "existingSecret": { "type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+            "existingSecretKey": { "type": "string", "pattern": "^[-._a-zA-Z0-9]+$" },
+            "value": { "type": "string" }
           }
         },
         "extraEnv": true,

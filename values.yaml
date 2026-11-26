@@ -9,6 +9,8 @@ nameOverride: ""
 fullnameOverride: ""
 # -- Deploy into this namespace instead of the release namespace
 namespaceOverride: ""
+# -- Cluster DNS domain, used to build fully qualified Service names
+clusterDomain: cluster.local
 
 global:
   # -- Image pull secrets for all components
@@ -348,17 +350,21 @@ ui:
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
-  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port).
-  # Defaults to this release's server Service; only rendered when it differs from the image default http://sartor-server:8080.
+  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port), stored in the UI ConfigMap.
+  # The image has no default and answers 502 without it. Defaults to this release's server Service, fully qualified:
+  # http://<fullname>-server.<namespace>.svc.<clusterDomain>:<server.service.port>
   apiUrl: ""
 
-  # -- Secret holding the API key the UI proxy sends to the server (SARTOR_API_KEY).
-  # The proxy injects the key for every visitor, so protect the UI with ingress-level auth (e.g. oauth2-proxy).
-  apiKeySecret:
-    # -- Secret name in the release namespace (empty: no key is sent)
-    name: ""
-    # -- Key within the Secret
-    key: api-key
+  # -- API key the UI proxy sends to the server (SARTOR_API_KEY). Optional: without one no key is sent.
+  # The proxy adds the key server-side for every visitor. Deploy the UI on a private network or behind an
+  # authenticating proxy; the server-side key proxy gives the API to anyone who can reach the UI. Never expose it publicly.
+  apiKey:
+    # -- Use this existing Secret in the release namespace (takes precedence over value)
+    existingSecret: ""
+    # -- Key within existingSecret
+    existingSecretKey: api-key
+    # -- Create a Secret with this key. Prefer existingSecret so the key stays out of values files.
+    value: ""
 
   # -- Extra environment variables
   extraEnv: []

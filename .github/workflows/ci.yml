@@ -184,6 +184,9 @@ jobs:
           helm upgrade sartor . -n sartor-system --reset-values
           hack/check-rbac.sh sartor-system sartor false
 
+      - name: UI env wiring, rollouts and API key Secrets
+        run: hack/check-ui-kind.sh sartor-system sartor
+
       - name: Uninstall keeps CRDs
         run: |
           helm uninstall sartor -n sartor-system

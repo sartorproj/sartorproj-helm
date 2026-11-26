@@ -69,8 +69,13 @@ for dep in by_kind.get("Deployment", []):
             fail(f"{where}: runAsUser is {uid}, want {want_uid}")
         if uid == 0:
             fail(f"{where}: runAsUser is 0")
-        if c["name"] == "ui" and not any(m.get("mountPath") == "/tmp" for m in c.get("volumeMounts", [])):
-            fail(f"{where}: /tmp must be a writable volume for the read-only root filesystem")
+        if c["name"] == "ui":
+            if not any(m.get("mountPath") == "/tmp" for m in c.get("volumeMounts", [])):
+                fail(f"{where}: /tmp must be a writable volume for the read-only root filesystem")
+            env = {e["name"]: e.get("value") for e in c.get("env", [])}
+            # nginx's runtime resolver ignores search domains.
+            if ".svc." not in (env.get("SARTOR_API_URL") or ""):
+                fail(f"{where}: SARTOR_API_URL must be a fully qualified Service URL, got {env.get('SARTOR_API_URL')}")
         if sc.get("readOnlyRootFilesystem") is not True:
             fail(f"{where}: readOnlyRootFilesystem is not true")
         if sc.get("allowPrivilegeEscalation") is not False:

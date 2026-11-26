@@ -137,6 +137,30 @@ Service account names
 {{- end }}
 
 {{/*
+UI upstream and API key Secret. nginx's runtime resolver skips search domains,
+so the default upstream is the fully qualified server Service.
+*/}}
+{{- define "sartor.ui.apiUrl" -}}
+{{- .Values.ui.apiUrl | default (printf "http://%s.%s.svc.%s:%d" (include "sartor.server.fullname" .) (include "sartor.namespace" .) .Values.clusterDomain (int .Values.server.service.port)) }}
+{{- end }}
+
+{{- define "sartor.ui.apiKeySecretName" -}}
+{{- if .Values.ui.apiKey.existingSecret }}
+{{- .Values.ui.apiKey.existingSecret }}
+{{- else if .Values.ui.apiKey.value }}
+{{- printf "%s-api-key" (include "sartor.ui.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{- define "sartor.ui.apiKeySecretKey" -}}
+{{- if .Values.ui.apiKey.existingSecret }}
+{{- .Values.ui.apiKey.existingSecretKey }}
+{{- else }}
+{{- "api-key" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Controller arguments. Safety flags are always passed explicitly so the
 rendered manifest documents what the controller is allowed to do.
 */}}
@@ -168,8 +192,11 @@ Validate value combinations that the schema cannot express.
 {{- if and (gt (int .Values.controller.replicaCount) 1) (not .Values.controller.leaderElection.enabled) }}
 {{- fail "controller.replicaCount > 1 requires controller.leaderElection.enabled=true" }}
 {{- end }}
-{{- if and .Values.ui.enabled (not .Values.server.enabled) }}
-{{- fail "ui.enabled=true requires server.enabled=true" }}
+{{- if and .Values.ui.enabled (not .Values.server.enabled) (not .Values.ui.apiUrl) }}
+{{- fail "ui.enabled=true requires server.enabled=true (or an explicit ui.apiUrl)" }}
+{{- end }}
+{{- if and .Values.ui.apiKey.existingSecret .Values.ui.apiKey.value }}
+{{- fail "set only one of ui.apiKey.existingSecret and ui.apiKey.value" }}
 {{- end }}
 {{- $managed := list "leader-elect" "health-probe-bind-address" "metrics-bind-address" "metrics-secure" "enable-oom-patching" "enable-git-writeback" "analysis-interval" "zap-log-level" "zap-encoder" "zap-devel" }}
 {{- range .Values.controller.extraArgs }}

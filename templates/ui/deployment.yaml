@@ -14,9 +14,15 @@ spec:
       {{- include "sartor.ui.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with $u.podAnnotations }}
+      {{- $chartSecret := and $u.apiKey.value (not $u.apiKey.existingSecret) }}
+      {{- if or $chartSecret $u.podAnnotations }}
       annotations:
+        {{- if $chartSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/ui/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with $u.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       labels:
         {{- include "sartor.ui.selectorLabels" . | nindent 8 }}
@@ -41,24 +47,19 @@ spec:
         - name: ui
           image: {{ include "sartor.image" (dict "image" $u.image "ctx" $) | quote }}
           imagePullPolicy: {{ $u.image.pullPolicy }}
-          {{- $apiUrl := $u.apiUrl | default (printf "http://%s:%d" (include "sartor.server.fullname" .) (int .Values.server.service.port)) }}
-          {{- if or (ne $apiUrl "http://sartor-server:8080") $u.apiKeySecret.name $u.extraEnv }}
           env:
-            {{- if ne $apiUrl "http://sartor-server:8080" }}
             - name: SARTOR_API_URL
-              value: {{ $apiUrl | quote }}
-            {{- end }}
-            {{- with $u.apiKeySecret.name }}
+              value: {{ include "sartor.ui.apiUrl" . | quote }}
+            {{- with include "sartor.ui.apiKeySecretName" . }}
             - name: SARTOR_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ . }}
-                  key: {{ $u.apiKeySecret.key }}
+                  key: {{ include "sartor.ui.apiKeySecretKey" $ }}
             {{- end }}
             {{- with $u.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- end }}
           ports:
             - name: http
               containerPort: 5173
