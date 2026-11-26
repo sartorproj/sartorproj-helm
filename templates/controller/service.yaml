@@ -1,22 +1,22 @@
-{{- if .Values.controller.enabled }}
+{{- if and .Values.controller.enabled .Values.controller.metrics.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: sartor-controller
+  name: {{ include "sartor.controller.fullname" . }}-metrics
   namespace: {{ include "sartor.namespace" . }}
   labels:
     {{- include "sartor.controller.labels" . | nindent 4 }}
+  {{- with .Values.controller.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.controller.service.type }}
   ports:
-  - port: {{ .Values.controller.service.healthPort }}
-    targetPort: health
-    protocol: TCP
-    name: health
-  - port: {{ .Values.controller.service.metricsPort }}
-    targetPort: metrics
-    protocol: TCP
-    name: metrics
+    - name: metrics
+      port: {{ .Values.controller.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
   selector:
     {{- include "sartor.controller.selectorLabels" . | nindent 4 }}
 {{- end }}

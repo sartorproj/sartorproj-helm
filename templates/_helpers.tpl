@@ -29,10 +29,25 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Namespace to use
+Namespace to deploy into.
 */}}
 {{- define "sartor.namespace" -}}
-{{- .Values.global.namespace | default .Release.Namespace }}
+{{- default .Release.Namespace .Values.namespaceOverride | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Per-component resource names.
+*/}}
+{{- define "sartor.controller.fullname" -}}
+{{- printf "%s-controller" (include "sartor.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "sartor.server.fullname" -}}
+{{- printf "%s-server" (include "sartor.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "sartor.ui.fullname" -}}
+{{- printf "%s-ui" (include "sartor.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -42,112 +57,129 @@ Common labels
 helm.sh/chart: {{ include "sartor.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: sartor
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
-Controller labels
+Component labels: include with (dict "ctx" $ "component" "controller")
 */}}
+{{- define "sartor.componentLabels" -}}
+{{ include "sartor.labels" .ctx }}
+{{ include "sartor.selectorLabels" . }}
+app.kubernetes.io/component: {{ .component }}
+{{- end }}
+
+{{- define "sartor.selectorLabels" -}}
+app.kubernetes.io/name: sartor-{{ .component }}
+app.kubernetes.io/instance: {{ .ctx.Release.Name }}
+{{- end }}
+
 {{- define "sartor.controller.labels" -}}
-{{ include "sartor.labels" . }}
-app.kubernetes.io/name: sartor-controller
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: controller
+{{ include "sartor.componentLabels" (dict "ctx" . "component" "controller") }}
 {{- end }}
 
-{{/*
-Controller selector labels
-*/}}
 {{- define "sartor.controller.selectorLabels" -}}
-app.kubernetes.io/name: sartor-controller
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{ include "sartor.selectorLabels" (dict "ctx" . "component" "controller") }}
 {{- end }}
 
-{{/*
-Server labels
-*/}}
 {{- define "sartor.server.labels" -}}
-{{ include "sartor.labels" . }}
-app.kubernetes.io/name: sartor-server
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: server
+{{ include "sartor.componentLabels" (dict "ctx" . "component" "server") }}
 {{- end }}
 
-{{/*
-Server selector labels
-*/}}
 {{- define "sartor.server.selectorLabels" -}}
-app.kubernetes.io/name: sartor-server
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{ include "sartor.selectorLabels" (dict "ctx" . "component" "server") }}
 {{- end }}
 
-{{/*
-UI labels
-*/}}
 {{- define "sartor.ui.labels" -}}
-{{ include "sartor.labels" . }}
-app.kubernetes.io/name: sartor-ui
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: ui
+{{ include "sartor.componentLabels" (dict "ctx" . "component" "ui") }}
 {{- end }}
 
-{{/*
-UI selector labels
-*/}}
 {{- define "sartor.ui.selectorLabels" -}}
-app.kubernetes.io/name: sartor-ui
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{ include "sartor.selectorLabels" (dict "ctx" . "component" "ui") }}
 {{- end }}
 
 {{/*
-Controller image
+Image reference: include with (dict "image" .Values.controller.image "ctx" $)
+Renders repo:tag, repo@digest or repo:tag@digest.
 */}}
-{{- define "sartor.controller.image" -}}
-{{- $tag := .Values.controller.image.tag | default .Chart.AppVersion }}
-{{- printf "%s:%s" .Values.controller.image.repository $tag }}
+{{- define "sartor.image" -}}
+{{- $tag := default .ctx.Chart.AppVersion .image.tag | toString }}
+{{- if .image.digest }}
+{{- if $tag }}
+{{- printf "%s:%s@%s" .image.repository $tag .image.digest }}
+{{- else }}
+{{- printf "%s@%s" .image.repository .image.digest }}
+{{- end }}
+{{- else }}
+{{- printf "%s:%s" .image.repository $tag }}
+{{- end }}
 {{- end }}
 
 {{/*
-Server image
-*/}}
-{{- define "sartor.server.image" -}}
-{{- $tag := .Values.server.image.tag | default .Chart.AppVersion }}
-{{- printf "%s:%s" .Values.server.image.repository $tag }}
-{{- end }}
-
-{{/*
-UI image
-*/}}
-{{- define "sartor.ui.image" -}}
-{{- $tag := .Values.ui.image.tag | default .Chart.AppVersion }}
-{{- printf "%s:%s" .Values.ui.image.repository $tag }}
-{{- end }}
-
-{{/*
-Controller service account name
+Service account names
 */}}
 {{- define "sartor.controller.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- .Values.controller.serviceAccountName | default "sartor-controller" }}
+{{- if .Values.controller.serviceAccount.create }}
+{{- default (include "sartor.controller.fullname" .) .Values.controller.serviceAccount.name }}
 {{- else }}
-{{- .Values.controller.serviceAccountName | default "default" }}
+{{- default "default" .Values.controller.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
-{{/*
-Server service account name
-*/}}
 {{- define "sartor.server.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- .Values.server.serviceAccountName | default "sartor-server" }}
+{{- if .Values.server.serviceAccount.create }}
+{{- default (include "sartor.server.fullname" .) .Values.server.serviceAccount.name }}
 {{- else }}
-{{- .Values.server.serviceAccountName | default "default" }}
+{{- default "default" .Values.server.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
 {{/*
-Server internal URL for UI
+Controller arguments. Safety flags are always passed explicitly so the
+rendered manifest documents what the controller is allowed to do.
 */}}
-{{- define "sartor.server.internalUrl" -}}
-{{- $namespace := include "sartor.namespace" . }}
-{{- printf "http://sartor-server.%s.svc.cluster.local:%d" $namespace (int .Values.server.service.port) }}
+{{- define "sartor.controller.args" -}}
+{{- $c := .Values.controller -}}
+- --leader-elect={{ $c.leaderElection.enabled }}
+- --health-probe-bind-address=:{{ $c.health.port }}
+{{- if $c.metrics.enabled }}
+- --metrics-bind-address=:{{ $c.metrics.port }}
+- --metrics-secure={{ $c.metrics.secure }}
+{{- else }}
+- --metrics-bind-address=0
+{{- end }}
+- --enable-oom-patching={{ $c.oomPatching.enabled }}
+- --enable-git-writeback={{ $c.gitWriteback.enabled }}
+- --analysis-interval={{ $c.analysisInterval }}
+- --zap-log-level={{ $c.log.level }}
+- --zap-encoder={{ $c.log.encoder }}
+- --zap-devel={{ $c.log.development }}
+{{- with $c.extraArgs }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validate value combinations that the schema cannot express.
+*/}}
+{{- define "sartor.validate" -}}
+{{- if and (gt (int .Values.controller.replicaCount) 1) (not .Values.controller.leaderElection.enabled) }}
+{{- fail "controller.replicaCount > 1 requires controller.leaderElection.enabled=true" }}
+{{- end }}
+{{- if and .Values.ui.enabled (not .Values.server.enabled) }}
+{{- fail "ui.enabled=true requires server.enabled=true" }}
+{{- end }}
+{{- $managed := list "leader-elect" "health-probe-bind-address" "metrics-bind-address" "metrics-secure" "enable-oom-patching" "enable-git-writeback" "analysis-interval" "zap-log-level" "zap-encoder" "zap-devel" }}
+{{- range .Values.controller.extraArgs }}
+{{- $flagName := . | toString | trimPrefix "-" | trimPrefix "-" | splitList "=" | first }}
+{{- if has $flagName $managed }}
+{{- fail (printf "controller.extraArgs must not set --%s; use the dedicated chart value instead" $flagName) }}
+{{- end }}
+{{- end }}
+{{- $m := .Values.controller.metrics }}
+{{- if and (or $m.serviceMonitor.enabled $m.vmServiceScrape.enabled) (not (and .Values.controller.enabled $m.enabled)) }}
+{{- fail "controller.metrics.serviceMonitor / vmServiceScrape require controller.enabled=true and controller.metrics.enabled=true" }}
+{{- end }}
 {{- end }}
