@@ -16,10 +16,12 @@ global:
 
 # -- CRD installation settings
 crds:
-  # -- Install CRDs
+  # -- Render the Sartor CRDs (Atelier, FitProfile, Tailoring) from files/crds
   install: true
-  # -- Keep CRDs on chart uninstall
+  # -- Annotate CRDs with helm.sh/resource-policy=keep so uninstall does not delete them (and every Sartor CR with them)
   keep: true
+  # -- Extra annotations for the CRDs
+  annotations: {}
 
 # -- Controller configuration
 controller:
