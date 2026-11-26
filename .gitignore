@@ -12,3 +12,9 @@ charts/
 # OS
 .DS_Store
 Thumbs.db
+
+# Leak check denylist (internal terms; never commit)
+.leakcheck-denylist
+
+# Python
+__pycache__/

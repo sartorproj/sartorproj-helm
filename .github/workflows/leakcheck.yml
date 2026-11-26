@@ -1,0 +1,55 @@
+name: Leak check
+
+# Never switch this to pull_request_target: the job runs PR code and loads a secret.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leakcheck-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  leakcheck:
+    name: Leak check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test the scanner
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      # Secrets and variables are both withheld from fork PRs; the scan then runs generic checks only.
+      - name: Load denylist
+        env:
+          LEAKCHECK_DENYLIST: ${{ secrets.LEAKCHECK_DENYLIST || vars.LEAKCHECK_DENYLIST }}
+        run: |
+          umask 077
+          : > .leakcheck-denylist
+          printf '%s\n' "$LEAKCHECK_DENYLIST" | tr -d '\r' | while IFS= read -r entry; do
+            entry="$(printf '%s' "$entry" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            case "$entry" in ''|'#'*) continue ;; esac
+            for form in "$entry" "$(printf '%s' "$entry" | tr '[:upper:]' '[:lower:]')" \
+                        "$(printf '%s' "$entry" | tr '[:lower:]' '[:upper:]')"; do
+              echo "::add-mask::$form"
+            done
+            printf '%s\n' "$entry" >> .leakcheck-denylist
+          done
+          echo "denylist entries loaded: $(wc -l < .leakcheck-denylist)"
+
+      - name: Scan
+        run: python3 .github/scripts/leakcheck.py --event-file "$GITHUB_EVENT_PATH" --denylist .leakcheck-denylist
+
+      - name: Remove denylist
+        if: always()
+        run: rm -f .leakcheck-denylist
