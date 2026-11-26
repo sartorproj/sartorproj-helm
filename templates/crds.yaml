@@ -1,7 +1,7 @@
 {{- if .Values.crds.install }}
 {{- range $path, $_ := .Files.Glob "files/crds/*.yaml" }}
 {{- $crd := $.Files.Get $path | fromYaml }}
-{{- $annotations := merge (dict) ($crd.metadata.annotations | default dict) $.Values.crds.annotations }}
+{{- $annotations := $crd.metadata.annotations | default dict }}
 {{- if $.Values.crds.keep }}
 {{- $_ := set $annotations "helm.sh/resource-policy" "keep" }}
 {{- end }}

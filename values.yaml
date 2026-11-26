@@ -21,8 +21,6 @@ crds:
   install: true
   # -- Annotate CRDs with helm.sh/resource-policy=keep so uninstall does not delete them (and every Sartor CR with them)
   keep: true
-  # -- Extra annotations for the CRDs
-  annotations: {}
 
 rbac:
   # -- Create ClusterRoles, Roles and bindings
@@ -69,8 +67,8 @@ controller:
     # -- Serve metrics over HTTPS with Kubernetes authn/authz (--metrics-secure).
     # Scrapers then need a bearer token bound to the metrics-reader ClusterRole (see readerSubjects).
     secure: true
-    # -- Subjects bound to the <fullname>-metrics-reader ClusterRole, e.g. the vmagent or Prometheus service account.
-    # Each item is a ServiceAccount: {name: my-vmagent, namespace: my-monitoring}
+    # -- Subjects bound to the <fullname>-metrics-reader ClusterRole, e.g. your Prometheus service account.
+    # Each item is a ServiceAccount: {name: my-prometheus, namespace: my-monitoring}
     readerSubjects: []
 
     serviceMonitor:
@@ -80,70 +78,22 @@ controller:
       namespace: ""
       # -- Extra labels, e.g. the label your Prometheus selects on
       labels: {}
-      # -- Extra annotations
-      annotations: {}
       # -- Scrape interval
       interval: 30s
       # -- Scrape timeout
       scrapeTimeout: 10s
-      # -- Keep the target's labels on conflict
-      honorLabels: false
       # -- TLS config for the HTTPS endpoint. The default self-signed certificate needs insecureSkipVerify.
       tlsConfig:
         insecureSkipVerify: true
-      # -- Relabelings applied before scraping
-      relabelings: []
-      # -- Relabelings applied to scraped samples
-      metricRelabelings: []
-
-    vmServiceScrape:
-      # -- Create a VictoriaMetrics operator VMServiceScrape (operator.victoriametrics.com/v1beta1)
-      enabled: false
-      # -- Namespace for the VMServiceScrape (defaults to the release namespace)
-      namespace: ""
-      # -- Extra labels, e.g. the label your VMAgent selects on
-      labels: {}
-      # -- Extra annotations
-      annotations: {}
-      # -- Scrape interval
-      interval: 30s
-      # -- Scrape timeout
-      scrapeTimeout: 10s
-      # -- Keep the target's labels on conflict
-      honorLabels: false
-      # -- TLS config for the HTTPS endpoint. The default self-signed certificate needs insecureSkipVerify.
-      tlsConfig:
-        insecureSkipVerify: true
-      # -- Relabel configs applied before scraping
-      relabelConfigs: []
-      # -- Relabel configs applied to scraped samples
-      metricRelabelConfigs: []
 
   health:
     # -- Health probe port (--health-probe-bind-address)
     port: 8081
 
-  log:
-    # -- Log level (--zap-log-level): debug, info, error, or an integer verbosity
-    level: info
-    # -- Log encoder (--zap-encoder): json or console
-    encoder: json
-    # -- Development mode logging (--zap-devel)
-    development: false
-
   # -- Extra controller arguments, appended after the chart-managed ones
   extraArgs: []
   # -- Extra environment variables
   extraEnv: []
-  # -- Extra volumes
-  extraVolumes: []
-  # -- Extra volume mounts
-  extraVolumeMounts: []
-
-  rbac:
-    # -- Restrict the release-namespace secrets Role to these Secret names (Atelier prometheus/git/argocd secretRefs).
-    # Empty allows get on any Secret in the release namespace. Never list/watch, never cluster-wide.
-    secretNames: []
 
   serviceAccount:
     # -- Create the controller service account
@@ -156,21 +106,19 @@ controller:
   service:
     # -- Metrics Service type
     type: ClusterIP
-    # -- Metrics Service annotations
-    annotations: {}
 
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
     limits:
+      cpu: 500m
       memory: 512Mi
 
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65532
     runAsGroup: 65532
-    fsGroup: 65532
     seccompProfile:
       type: RuntimeDefault
 
@@ -199,18 +147,12 @@ controller:
     initialDelaySeconds: 5
     periodSeconds: 10
 
-  # -- Seconds to wait for graceful shutdown
-  terminationGracePeriodSeconds: 10
-  # -- Priority class name
-  priorityClassName: ""
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations
   tolerations: []
   # -- Affinity rules
   affinity: {}
-  # -- Topology spread constraints
-  topologySpreadConstraints: []
   # -- Pod annotations
   podAnnotations: {}
   # -- Pod labels
@@ -260,8 +202,6 @@ server:
     type: ClusterIP
     # -- Service port
     port: 8080
-    # -- Service annotations
-    annotations: {}
 
   ingress:
     # -- Expose the server through an Ingress
@@ -281,16 +221,16 @@ server:
 
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 100m
+      memory: 128Mi
     limits:
-      memory: 256Mi
+      cpu: 500m
+      memory: 512Mi
 
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65532
     runAsGroup: 65532
-    fsGroup: 65532
     seccompProfile:
       type: RuntimeDefault
 
@@ -319,16 +259,12 @@ server:
     initialDelaySeconds: 5
     periodSeconds: 10
 
-  # -- Priority class name
-  priorityClassName: ""
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations
   tolerations: []
   # -- Affinity rules
   affinity: {}
-  # -- Topology spread constraints
-  topologySpreadConstraints: []
   # -- Pod annotations
   podAnnotations: {}
   # -- Pod labels
@@ -374,8 +310,6 @@ ui:
     type: ClusterIP
     # -- Service port
     port: 5173
-    # -- Service annotations
-    annotations: {}
 
   ingress:
     # -- Expose the UI through an Ingress
@@ -395,10 +329,11 @@ ui:
 
   resources:
     requests:
-      cpu: 10m
-      memory: 32Mi
+      cpu: 50m
+      memory: 64Mi
     limits:
-      memory: 128Mi
+      cpu: 200m
+      memory: 256Mi
 
   # -- Pod security context. The UI image is nginx-unprivileged (UID 101) and works under any non-root UID;
   # /tmp is an emptyDir so the root filesystem can stay read-only.
@@ -406,7 +341,6 @@ ui:
     runAsNonRoot: true
     runAsUser: 101
     runAsGroup: 101
-    fsGroup: 101
     seccompProfile:
       type: RuntimeDefault
 
@@ -436,16 +370,12 @@ ui:
     initialDelaySeconds: 5
     periodSeconds: 10
 
-  # -- Priority class name
-  priorityClassName: ""
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations
   tolerations: []
   # -- Affinity rules
   affinity: {}
-  # -- Topology spread constraints
-  topologySpreadConstraints: []
   # -- Pod annotations
   podAnnotations: {}
   # -- Pod labels

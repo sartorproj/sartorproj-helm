@@ -8,7 +8,7 @@ Controller ({{ include "sartor.image" (dict "image" $c.image "ctx" $) }})
   OOM patching:      {{ if $c.oomPatching.enabled }}ENABLED - OOM-killed containers of workloads with a non-paused Tailoring get higher memory limits{{ else }}disabled{{ end }}
   git write-back:    {{ if $c.gitWriteback.enabled }}ENABLED - non-paused Tailorings open pull requests{{ else }}disabled (recommend-only){{ end }}
   logs: kubectl logs -n {{ $ns }} deploy/{{ include "sartor.controller.fullname" . }}
-{{- if and $c.metrics.enabled $c.metrics.secure (not $c.metrics.readerSubjects) (or $c.metrics.serviceMonitor.enabled $c.metrics.vmServiceScrape.enabled) }}
+{{- if and $c.metrics.enabled $c.metrics.secure (not $c.metrics.readerSubjects) $c.metrics.serviceMonitor.enabled }}
 
   WARNING: metrics are served over HTTPS with authn/authz, but controller.metrics.readerSubjects is empty.
   Bind your scraper's service account to ClusterRole {{ include "sartor.fullname" . }}-metrics-reader or scrapes will get 403.
@@ -30,22 +30,8 @@ UI
 
 Next steps
   1. Create the credentials Secret(s) in {{ $ns }}. Sartor reads Secrets only in this namespace.
-  2. Create a cluster-scoped Atelier, for example for VictoriaMetrics vmselect:
-
-     apiVersion: autoscaling.sartorproj.io/v1alpha1
-     kind: Atelier
-     metadata:
-       name: default
-     spec:
-       prometheus:
-         url: http://vmselect.my-monitoring.svc:8481/select/0/prometheus
-       gitProvider:
-         type: github
-         secretRef:
-           name: github-token
-           namespace: {{ $ns }}
-       defaultAnalysisWindow: 168h
-
+  2. Create a cluster-scoped Atelier that points at your Prometheus-compatible metrics endpoint
+     and references those Secrets.
   3. Create a FitProfile and a Tailoring per workload. Start with spec.paused: true to review recommendations first.
 
 Docs: https://github.com/sartorproj/sartor

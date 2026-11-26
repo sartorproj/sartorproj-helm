@@ -39,50 +39,12 @@ helm install sartor oci://ghcr.io/sartorproj/charts/sartor --version 0.2.0 -n sa
 
 The chart deploys into the release namespace (`namespaceOverride` changes it). It does not create the namespace; use `--create-namespace`.
 
-### With VictoriaMetrics
-
-```yaml
-# values-vm.yaml
-controller:
-  metrics:
-    readerSubjects:
-      - name: my-vmagent           # your vmagent service account
-        namespace: my-monitoring
-    vmServiceScrape:
-      enabled: true
-  rbac:
-    secretNames:                   # optional: restrict Secret reads to these names
-      - github-token
-```
-
-```bash
-helm install sartor . -n sartor-system --create-namespace -f values-vm.yaml
-```
-
-Then create the Atelier with your vmselect URL (placeholders below). Controller builds with the sartorproj/sartor VictoriaMetrics fix keep the path prefix and the query string (e.g. `extra_label`) on every request:
-
-```yaml
-apiVersion: autoscaling.sartorproj.io/v1alpha1
-kind: Atelier
-metadata:
-  name: default
-spec:
-  prometheus:
-    url: http://vmselect.my-monitoring.svc:8481/select/0/prometheus?extra_label=cluster=my-cluster
-  gitProvider:
-    type: github
-    secretRef:
-      name: github-token
-      namespace: sartor-system     # must be the release namespace
-  defaultAnalysisWindow: 168h
-```
-
 ## RBAC
 
 The controller gets:
 
 - **ClusterRole**: get/list/watch/update/patch on Sartor CRs and their status/finalizers. Read-only on deployments/statefulsets/daemonsets, HPAs and resource quotas. `tokenreviews`/`subjectaccessreviews` create when `controller.metrics.secure=true`.
-- **Role in the release namespace**: `get` on Secrets (optionally limited by `controller.rbac.secretNames`), leader-election leases, and events.
+- **Role in the release namespace**: `get` on Secrets, leader-election leases, and events.
 
 There is no cluster-wide access to Secrets, and no `list`/`watch` on Secrets anywhere. Credentials referenced by an Atelier (`prometheus.secretRef`, `gitProvider.secretRef`, `argocd.secretRef`) must therefore live in the release namespace.
 
@@ -95,11 +57,11 @@ The server, when enabled, gets read-only access to Sartor CRs, `get` on Secrets 
 The controller serves metrics on `:8443` over HTTPS, with Kubernetes authentication and authorization (`--metrics-secure=true`) and a self-signed certificate. Scrapers need:
 
 1. a bearer token whose service account is bound to the `<fullname>-metrics-reader` ClusterRole (`controller.metrics.readerSubjects` creates the binding), and
-2. `tlsConfig.insecureSkipVerify: true` (the default in both monitor objects) or your own CA.
+2. `tlsConfig.insecureSkipVerify: true` (the ServiceMonitor default) or your own CA.
 
 Set `controller.metrics.secure=false` (and usually `controller.metrics.port=8080`) for plain HTTP.
 
-`controller.metrics.serviceMonitor.enabled` creates a prometheus-operator `ServiceMonitor`. `controller.metrics.vmServiceScrape.enabled` creates a VictoriaMetrics operator `VMServiceScrape`. Each needs its operator's CRDs installed.
+`controller.metrics.serviceMonitor.enabled` creates a prometheus-operator `ServiceMonitor` (`monitoring.coreos.com/v1`); the prometheus-operator CRDs must be installed. The chart ships no other monitoring objects: the VictoriaMetrics operator converts ServiceMonitors into its own scrape objects automatically.
 
 ## CRDs
 
@@ -109,12 +71,6 @@ A later reinstall must use the same release name and namespace to adopt the kept
 
 ```bash
 kubectl delete crd ateliers.autoscaling.sartorproj.io fitprofiles.autoscaling.sartorproj.io tailorings.autoscaling.sartorproj.io
-```
-
-`files/crds` must match `config/crd/bases` on `sartorproj/sartor` `main`; CI fails otherwise. To sync:
-
-```bash
-hack/sync-crds.sh ../sartor
 ```
 
 ## Values
@@ -139,13 +95,10 @@ hack/sync-crds.sh ../sartor
 | `controller.metrics.enabled` / `port` / `secure` | Metrics server | `true` / `8443` / `true` |
 | `controller.metrics.readerSubjects` | Service accounts bound to the metrics-reader ClusterRole | `[]` |
 | `controller.metrics.serviceMonitor.*` | prometheus-operator ServiceMonitor | disabled |
-| `controller.metrics.vmServiceScrape.*` | VictoriaMetrics VMServiceScrape | disabled |
-| `controller.log.level` / `encoder` / `development` | zap logging flags | `info` / `json` / `false` |
-| `controller.rbac.secretNames` | Restrict Secret `get` to these names | `[]` (any Secret in the namespace) |
 | `controller.extraArgs` | Additional flags (chart-managed flags are rejected) | `[]` |
-| `controller.resources` | Requests/limits | `100m`/`128Mi` requests, `512Mi` memory limit |
+| `controller.resources` | Requests/limits | `100m`/`128Mi` requests, `500m`/`512Mi` limits |
 | `controller.podSecurityContext` / `securityContext` | Non-root UID/GID 65532, read-only root FS, drop ALL, seccomp `RuntimeDefault` | hardened |
-| `controller.nodeSelector` / `tolerations` / `affinity` / `topologySpreadConstraints` / `priorityClassName` | Scheduling | empty |
+| `controller.nodeSelector` / `tolerations` / `affinity` | Scheduling | empty |
 | `argocd.enabled` | Grant Argo CD Applications access | `false` |
 | `server.enabled` | Deploy the API server | `false` |
 | `server.apiKeySecretName` | Secret with API keys (release namespace). Without it the API is unauthenticated. | `sartor-api-keys` |
@@ -175,28 +128,11 @@ The `sartor-ui` image is nginx-unprivileged and serves the app plus a same-origi
 
 ## Development
 
-CI (`.github/workflows/ci.yml`) runs:
-
-- `helm lint --strict` for every `ci/*-values.yaml`.
-- `helm template` for every values file on Kubernetes 1.28 and 1.31, followed by:
-  - `hack/check-manifests.py`, which checks that RBAC matches the rendered flags, Secrets are only `get` in a Role, there are no wildcards, and security contexts are hardened;
-  - `kubeconform -strict`, including ServiceMonitor/VMServiceScrape schemas.
-- Rejection tests for invalid values.
-- `ct lint`.
-- A CRD sync check against `sartorproj/sartor` `main`.
-- A kind install, upgrade and uninstall. This validates objects against a real API server, asserts the effective RBAC with `kubectl auth can-i` (`hack/check-rbac.sh`), and checks that CRDs survive uninstall.
-
-Run the same checks locally:
+CI (`.github/workflows/ci.yml`) runs `helm lint --strict`, renders the default values with `helm template` and validates them with `kubeconform -strict`, and packages the chart. Run the same checks locally:
 
 ```bash
-for f in ci/*-values.yaml; do
-  helm lint --strict . -f "$f"
-  helm template sartor . -n sartor-system -f "$f" | tee /tmp/out.yaml | hack/check-manifests.py
-  kubeconform -strict -summary -skip CustomResourceDefinition \
-    -schema-location default \
-    -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-    /tmp/out.yaml
-done
+helm lint --strict .
+helm template sartor . -n sartor-system | kubeconform -strict -summary -skip CustomResourceDefinition
 ```
 
 ## License

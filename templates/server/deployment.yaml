@@ -30,9 +30,6 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "sartor.server.serviceAccountName" . }}
-      {{- with $s.priorityClassName }}
-      priorityClassName: {{ . }}
-      {{- end }}
       {{- with $s.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -83,10 +80,6 @@ spec:
       {{- end }}
       {{- with $s.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with $s.topologySpreadConstraints }}
-      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

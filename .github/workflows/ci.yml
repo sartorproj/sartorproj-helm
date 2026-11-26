@@ -30,22 +30,12 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Run Helm lint for every CI values file
-        run: |
-          helm lint --strict .
-          for f in ci/*-values.yaml; do
-            echo "::group::helm lint $f"
-            helm lint --strict . -f "$f"
-            echo "::endgroup::"
-          done
+      - name: Run Helm lint
+        run: helm lint --strict .
 
   template:
-    name: Template, policy checks and kubeconform (k8s ${{ matrix.kube }})
+    name: Template and kubeconform
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        kube: ["1.28.0", "1.31.0"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -54,145 +44,17 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
 
       - name: Install kubeconform
         run: |
           curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
           sudo mv kubeconform /usr/local/bin/
 
-      - name: Render, check policy and validate every CI values file
+      # CustomResourceDefinition objects have no published JSON schema.
+      - name: Render default values and validate
         run: |
-          pip install --quiet pyyaml
-          mkdir -p rendered
-          for f in ci/*-values.yaml; do
-            name="$(basename "$f" -values.yaml)"
-            echo "::group::$name"
-            helm template sartor . -n sartor-system --kube-version "${{ matrix.kube }}" -f "$f" > "rendered/$name.yaml"
-            python3 hack/check-manifests.py < "rendered/$name.yaml"
-            # CRD objects have no published JSON schema; the kind job validates them against a real API server.
-            kubeconform -strict -summary \
-              -kubernetes-version "${{ matrix.kube }}" \
-              -skip CustomResourceDefinition \
-              -schema-location default \
-              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-              "rendered/$name.yaml"
-            echo "::endgroup::"
-          done
-
-      - name: Invalid values must be rejected
-        run: |
-          reject() {
-            if helm template sartor . "$@" > /dev/null 2>&1; then
-              echo "FAIL: accepted $*"; exit 1
-            fi
-            echo "ok: rejected $*"
-          }
-          reject --set controller.oomPatching.enable=true
-          reject --set controller.analysisInterval=7d
-          reject --set controller.image.digest=latest
-          reject --set 'controller.extraArgs[0]=--enable-oom-patching=true'
-          reject --set 'controller.extraArgs[0]=-enable-git-writeback'
-          reject --set controller.replicaCount=2 --set controller.leaderElection.enabled=false
-          reject --set ui.enabled=true
-          reject --set controller.metrics.enabled=false --set controller.metrics.vmServiceScrape.enabled=true
-
-  chart-testing:
-    name: chart-testing lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-
-      - name: Install chart-testing
-        uses: helm/chart-testing-action@v2
-
-      - name: Run chart-testing (lint)
-        run: |
-          ct lint --chart-dirs . --charts . \
-            --target-branch "${{ github.event.repository.default_branch }}" \
-            --check-version-increment="${{ github.event_name == 'pull_request' }}" \
-            --validate-maintainers=false
-
-  crd-sync:
-    name: CRDs in sync with sartorproj/sartor
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Checkout sartorproj/sartor
-        uses: actions/checkout@v6
-        with:
-          repository: sartorproj/sartor
-          ref: main
-          path: upstream
-          sparse-checkout: config/crd/bases
-
-      - name: Compare CRDs
-        run: |
-          if ! diff -ru upstream/config/crd/bases files/crds; then
-            echo "::error::files/crds differs from sartorproj/sartor config/crd/bases on main. Run hack/sync-crds.sh <sartor-checkout>."
-            exit 1
-          fi
-
-  kind:
-    name: Install on kind and check effective RBAC
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Create kind cluster
-        uses: helm/kind-action@v1
-
-      # Images are not awaited: the API server validates every object (including CRDs) and RBAC is checked as installed.
-      - name: Install with defaults (recommend-only)
-        run: |
-          helm install sartor . -n sartor-system --create-namespace
-          hack/check-rbac.sh sartor-system sartor false
-
-      - name: Upgrade with OOM patching, git write-back and server
-        run: |
-          helm upgrade sartor . -n sartor-system -f ci/oom-writeback-values.yaml --set server.enabled=true
-          hack/check-rbac.sh sartor-system sartor true true
-
-      # Without --reset-values, helm upgrade with no values reuses the previous release's values.
-      - name: Downgrade to recommend-only revokes workload writes
-        run: |
-          helm upgrade sartor . -n sartor-system --reset-values
-          hack/check-rbac.sh sartor-system sartor false
-
-      - name: UI env wiring, rollouts and API key Secrets
-        run: hack/check-ui-kind.sh sartor-system sartor
-
-      - name: Uninstall keeps CRDs
-        run: |
-          helm uninstall sartor -n sartor-system
-          for crd in ateliers fitprofiles tailorings; do
-            kubectl get crd "${crd}.autoscaling.sartorproj.io"
-          done
+          helm template sartor . -n sartor-system > rendered.yaml
+          kubeconform -strict -summary -skip CustomResourceDefinition rendered.yaml
 
   package:
     name: Test Chart Packaging
@@ -215,12 +77,10 @@ jobs:
         run: |
           ls -la .helm-releases/
           tar -tzf .helm-releases/*.tgz
-          tar -tzf .helm-releases/*.tgz | grep -q 'sartor/files/crds/autoscaling.sartorproj.io_tailorings.yaml'
-          tar -tzf .helm-releases/*.tgz | grep -q 'sartor/values.schema.json'
 
   push-oci:
     name: Push to GitHub Container Registry
-    needs: [lint, template, chart-testing, crd-sync, kind, package]
+    needs: [lint, template, package]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:

@@ -60,8 +60,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
-        "port": { "$ref": "#/definitions/port" },
-        "annotations": { "$ref": "#/definitions/stringMap" }
+        "port": { "$ref": "#/definitions/port" }
       }
     },
     "stringMap": {
@@ -79,22 +78,16 @@
       "required": ["enabled"],
       "properties": { "enabled": { "type": "boolean" } }
     },
-    "scrape": {
+    "serviceMonitor": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string" },
         "labels": { "$ref": "#/definitions/stringMap" },
-        "annotations": { "$ref": "#/definitions/stringMap" },
         "interval": { "$ref": "#/definitions/duration" },
         "scrapeTimeout": { "$ref": "#/definitions/duration" },
-        "honorLabels": { "type": "boolean" },
-        "tlsConfig": { "type": "object" },
-        "relabelings": { "type": "array" },
-        "metricRelabelings": { "type": "array" },
-        "relabelConfigs": { "type": "array" },
-        "metricRelabelConfigs": { "type": "array" }
+        "tlsConfig": { "type": "object" }
       }
     },
     "podCommon": {
@@ -106,11 +99,9 @@
         "securityContext": { "type": "object" },
         "livenessProbe": { "type": "object" },
         "readinessProbe": { "type": "object" },
-        "priorityClassName": { "type": "string" },
         "nodeSelector": { "$ref": "#/definitions/stringMap" },
         "tolerations": { "type": "array" },
         "affinity": { "type": "object" },
-        "topologySpreadConstraints": { "type": "array" },
         "podAnnotations": { "$ref": "#/definitions/stringMap" },
         "podLabels": { "$ref": "#/definitions/stringMap" },
         "extraEnv": { "type": "array" }
@@ -133,8 +124,7 @@
       "additionalProperties": false,
       "properties": {
         "install": { "type": "boolean" },
-        "keep": { "type": "boolean" },
-        "annotations": { "$ref": "#/definitions/stringMap" }
+        "keep": { "type": "boolean" }
       }
     },
     "rbac": {
@@ -177,8 +167,7 @@
                 }
               }
             },
-            "serviceMonitor": { "$ref": "#/definitions/scrape" },
-            "vmServiceScrape": { "$ref": "#/definitions/scrape" }
+            "serviceMonitor": { "$ref": "#/definitions/serviceMonitor" }
           }
         },
         "health": {
@@ -188,26 +177,8 @@
             "port": { "$ref": "#/definitions/port" }
           }
         },
-        "log": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "level": { "type": ["string", "integer"] },
-            "encoder": { "type": "string", "enum": ["json", "console"] },
-            "development": { "type": "boolean" }
-          }
-        },
         "extraArgs": { "type": "array", "items": { "type": "string" } },
         "extraEnv": true,
-        "extraVolumes": { "type": "array" },
-        "extraVolumeMounts": { "type": "array" },
-        "rbac": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "secretNames": { "type": "array", "items": { "type": "string", "minLength": 1 } }
-          }
-        },
         "serviceAccount": { "$ref": "#/definitions/serviceAccount" },
         "service": { "$ref": "#/definitions/service" },
         "resources": true,
@@ -215,12 +186,9 @@
         "securityContext": true,
         "livenessProbe": true,
         "readinessProbe": true,
-        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
-        "priorityClassName": true,
         "nodeSelector": true,
         "tolerations": true,
         "affinity": true,
-        "topologySpreadConstraints": true,
         "podAnnotations": true,
         "podLabels": true
       }
@@ -245,11 +213,9 @@
         "securityContext": true,
         "livenessProbe": true,
         "readinessProbe": true,
-        "priorityClassName": true,
         "nodeSelector": true,
         "tolerations": true,
         "affinity": true,
-        "topologySpreadConstraints": true,
         "podAnnotations": true,
         "podLabels": true
       }
@@ -280,11 +246,9 @@
         "securityContext": true,
         "livenessProbe": true,
         "readinessProbe": true,
-        "priorityClassName": true,
         "nodeSelector": true,
         "tolerations": true,
         "affinity": true,
-        "topologySpreadConstraints": true,
         "podAnnotations": true,
         "podLabels": true
       }

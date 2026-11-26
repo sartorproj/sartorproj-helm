@@ -11,10 +11,6 @@ metadata:
     {{- with $sm.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with $sm.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
 spec:
   namespaceSelector:
     matchNames:
@@ -27,7 +23,6 @@ spec:
       path: /metrics
       interval: {{ $sm.interval }}
       scrapeTimeout: {{ $sm.scrapeTimeout }}
-      honorLabels: {{ $sm.honorLabels }}
       {{- if $m.secure }}
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -37,13 +32,5 @@ spec:
       {{- end }}
       {{- else }}
       scheme: http
-      {{- end }}
-      {{- with $sm.relabelings }}
-      relabelings:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with $sm.metricRelabelings }}
-      metricRelabelings:
-        {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

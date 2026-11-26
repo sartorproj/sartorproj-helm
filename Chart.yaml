@@ -4,7 +4,6 @@ description: A Helm chart for Sartor - Kubernetes resource optimization via GitO
 type: application
 version: 0.2.0
 appVersion: "0.1.0"
-kubeVersion: ">=1.23.0-0"
 keywords:
   - kubernetes
   - resource-optimization
@@ -14,6 +13,5 @@ keywords:
 home: https://github.com/sartorproj/sartor
 sources:
   - https://github.com/sartorproj/sartor
-  - https://github.com/sartorproj/sartorproj-helm
 maintainers:
   - name: Sartor Team

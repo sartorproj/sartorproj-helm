@@ -32,14 +32,10 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "sartor.controller.serviceAccountName" . }}
-      {{- with $c.priorityClassName }}
-      priorityClassName: {{ . }}
-      {{- end }}
       {{- with $c.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      terminationGracePeriodSeconds: {{ $c.terminationGracePeriodSeconds }}
       containers:
         - name: manager
           image: {{ include "sartor.image" (dict "image" $c.image "ctx" $) | quote }}
@@ -79,19 +75,6 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-            {{- with $c.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
-      volumes:
-        - name: tmp
-          emptyDir:
-            sizeLimit: 64Mi
-        {{- with $c.extraVolumes }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
       {{- with $c.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -102,10 +85,6 @@ spec:
       {{- end }}
       {{- with $c.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with $c.topologySpreadConstraints }}
-      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

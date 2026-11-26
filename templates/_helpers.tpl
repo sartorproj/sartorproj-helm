@@ -177,9 +177,6 @@ rendered manifest documents what the controller is allowed to do.
 - --enable-oom-patching={{ $c.oomPatching.enabled }}
 - --enable-git-writeback={{ $c.gitWriteback.enabled }}
 - --analysis-interval={{ $c.analysisInterval }}
-- --zap-log-level={{ $c.log.level }}
-- --zap-encoder={{ $c.log.encoder }}
-- --zap-devel={{ $c.log.development }}
 {{- with $c.extraArgs }}
 {{ toYaml . }}
 {{- end }}
@@ -198,7 +195,7 @@ Validate value combinations that the schema cannot express.
 {{- if and .Values.ui.apiKey.existingSecret .Values.ui.apiKey.value }}
 {{- fail "set only one of ui.apiKey.existingSecret and ui.apiKey.value" }}
 {{- end }}
-{{- $managed := list "leader-elect" "health-probe-bind-address" "metrics-bind-address" "metrics-secure" "enable-oom-patching" "enable-git-writeback" "analysis-interval" "zap-log-level" "zap-encoder" "zap-devel" }}
+{{- $managed := list "leader-elect" "health-probe-bind-address" "metrics-bind-address" "metrics-secure" "enable-oom-patching" "enable-git-writeback" "analysis-interval" }}
 {{- range .Values.controller.extraArgs }}
 {{- $flagName := . | toString | trimPrefix "-" | trimPrefix "-" | splitList "=" | first }}
 {{- if has $flagName $managed }}
@@ -206,7 +203,7 @@ Validate value combinations that the schema cannot express.
 {{- end }}
 {{- end }}
 {{- $m := .Values.controller.metrics }}
-{{- if and (or $m.serviceMonitor.enabled $m.vmServiceScrape.enabled) (not (and .Values.controller.enabled $m.enabled)) }}
-{{- fail "controller.metrics.serviceMonitor / vmServiceScrape require controller.enabled=true and controller.metrics.enabled=true" }}
+{{- if and $m.serviceMonitor.enabled (not (and .Values.controller.enabled $m.enabled)) }}
+{{- fail "controller.metrics.serviceMonitor requires controller.enabled=true and controller.metrics.enabled=true" }}
 {{- end }}
 {{- end }}

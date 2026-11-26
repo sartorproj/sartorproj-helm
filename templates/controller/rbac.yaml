@@ -88,10 +88,6 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    {{- with $c.rbac.secretNames }}
-    resourceNames:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
     verbs: ["get"]
   {{- if $c.leaderElection.enabled }}
   - apiGroups: ["coordination.k8s.io"]
