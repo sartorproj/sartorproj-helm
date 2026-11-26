@@ -1,0 +1,18 @@
+# HTTPS metrics with authn/authz, scraped by both operators.
+controller:
+  metrics:
+    readerSubjects:
+      - name: vmagent-vmagent
+        namespace: monitoring
+      - name: prometheus-k8s
+        namespace: monitoring
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: kube-prometheus-stack
+    vmServiceScrape:
+      enabled: true
+      metricRelabelConfigs:
+        - action: drop
+          source_labels: [__name__]
+          regex: go_gc_.*

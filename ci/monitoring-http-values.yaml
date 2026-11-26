@@ -1,0 +1,8 @@
+# Plain HTTP metrics: no metrics-auth or metrics-reader RBAC must be rendered.
+controller:
+  metrics:
+    secure: false
+    port: 8080
+    vmServiceScrape:
+      enabled: true
+      namespace: monitoring

@@ -1,215 +1,65 @@
 # Sartor Helm Chart
 
-A Helm chart for deploying [Sartor](https://github.com/sartorproj/sartor) - Kubernetes resource optimization via GitOps.
+Helm chart for [Sartor](https://github.com/sartorproj/sartor), a Kubernetes controller that recommends CPU/memory requests from Prometheus-compatible metrics (Prometheus, VictoriaMetrics) and opens GitOps pull requests.
 
-## Overview
+The chart installs:
 
-Sartor analyzes your workload metrics and creates pull requests to right-size container resources. This chart installs:
+- **CRDs**: Atelier (cluster-scoped), FitProfile and Tailoring, rendered from `files/crds` (copied verbatim from `sartorproj/sartor` `config/crd/bases`).
+- **Controller** (`ghcr.io/sartorproj/sartor`): always on.
+- **API server** (`ghcr.io/sartorproj/sartor-server`): optional, off by default.
+- **UI** (`ghcr.io/sartorproj/sartor-ui`): optional, off by default, requires the server.
 
-- **Controller**: Watches Tailoring resources and generates recommendations
-- **Server**: REST API for the UI and external integrations
-- **UI**: Web dashboard for visualizing recommendations
-- **CRDs**: Custom Resource Definitions (Atelier, FitProfile, Tailoring)
+## Safe defaults
 
-## Prerequisites
+A default install is **recommend-only**: the controller analyses workloads and records recommendations in `Tailoring` status. It does not patch workloads or open pull requests. Each write path is a separate opt-in:
 
-- Kubernetes 1.21+
-- Helm 3.0+
-- Prometheus (for metrics collection)
-- Git provider (GitHub, GitLab, or Bitbucket)
+| Value | Controller flag | Default | What it allows | Extra RBAC |
+|-------|-----------------|---------|----------------|------------|
+| `controller.oomPatching.enabled` | `--enable-oom-patching` | `false` | Raise memory limits of OOM-killed containers in workloads with a non-paused Tailoring | `pods` get/list/watch; `deployments`, `statefulsets`, `daemonsets` update/patch (cluster-wide) |
+| `controller.gitWriteback.enabled` | `--enable-git-writeback` | `false` | Open/update one PR per non-paused Tailoring | none (writes go to the git provider) |
+| `controller.analysisInterval` | `--analysis-interval` | `6h` | How often a Tailoring is re-analysed | - |
 
-## Installation
+The flags are always rendered explicitly. `controller.extraArgs` cannot override them; the chart fails to render instead.
 
-### Add the Helm repository
+> These three flags need a controller build that includes them (sartorproj/sartor PRs for the OOM opt-in, analysis interval and git write-back). Older controller images exit with `flag provided but not defined`.
 
-```bash
-helm repo add sartor https://sartorproj.github.io/sartorproj-helm
-helm repo update
-```
+## Install
 
-### Install the chart
-
-```bash
-helm install sartor sartor/sartor -n sartor-system --create-namespace
-```
-
-### Install from local directory
+The chart is not published to a Helm repository yet. Install from a checkout:
 
 ```bash
 helm install sartor . -n sartor-system --create-namespace
 ```
 
-## Configuration
+When a version is published from `main` or a tag, it is available as an OCI chart:
 
-### Global Settings
+```bash
+helm install sartor oci://ghcr.io/sartorproj/charts/sartor --version 0.2.0 -n sartor-system --create-namespace
+```
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `global.namespace` | Namespace to deploy Sartor | `sartor-system` |
-| `global.createNamespace` | Create the namespace | `true` |
-| `global.imagePullSecrets` | Image pull secrets for all components | `[]` |
+The chart deploys into the release namespace (`namespaceOverride` changes it). It does not create the namespace; use `--create-namespace`.
 
-### CRDs
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `crds.install` | Install CRDs | `true` |
-| `crds.keep` | Keep CRDs on uninstall | `true` |
-
-### Controller
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `controller.enabled` | Enable the controller | `true` |
-| `controller.replicaCount` | Number of replicas | `1` |
-| `controller.image.repository` | Controller image repository | `ghcr.io/sartorproj/sartor-controller` |
-| `controller.image.tag` | Controller image tag | `""` (uses appVersion) |
-| `controller.resources.requests.cpu` | CPU request | `100m` |
-| `controller.resources.requests.memory` | Memory request | `128Mi` |
-| `controller.resources.limits.cpu` | CPU limit | `500m` |
-| `controller.resources.limits.memory` | Memory limit | `512Mi` |
-
-### Server
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `server.enabled` | Enable the server | `true` |
-| `server.replicaCount` | Number of replicas | `1` |
-| `server.image.repository` | Server image repository | `ghcr.io/sartorproj/sartor-server` |
-| `server.image.tag` | Server image tag | `""` (uses appVersion) |
-| `server.service.type` | Service type | `ClusterIP` |
-| `server.service.port` | Service port | `8080` |
-| `server.ingress.enabled` | Enable ingress | `false` |
-| `server.ingress.className` | Ingress class name | `""` |
-| `server.ingress.hosts` | Ingress hosts | `[{host: sartor-api.local, paths: [{path: /, pathType: Prefix}]}]` |
-
-### UI
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `ui.enabled` | Enable the UI | `true` |
-| `ui.replicaCount` | Number of replicas | `1` |
-| `ui.image.repository` | UI image repository | `ghcr.io/sartorproj/sartor-ui` |
-| `ui.image.tag` | UI image tag | `""` (uses appVersion) |
-| `ui.service.type` | Service type | `ClusterIP` |
-| `ui.service.port` | Service port | `5173` |
-| `ui.ingress.enabled` | Enable ingress | `false` |
-| `ui.ingress.className` | Ingress class name | `""` |
-| `ui.ingress.hosts` | Ingress hosts | `[{host: sartor.local, paths: [{path: /, pathType: Prefix}]}]` |
-
-### RBAC
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `rbac.create` | Create RBAC resources | `true` |
-| `serviceAccount.create` | Create service accounts | `true` |
-| `serviceAccount.annotations` | Service account annotations | `{}` |
-
-## Example Values
-
-### Basic installation
+### Staging with VictoriaMetrics
 
 ```yaml
-global:
-  namespace: sartor-system
-
+# values-staging.yaml
 controller:
-  enabled: true
-
-server:
-  enabled: true
-
-ui:
-  enabled: true
+  metrics:
+    readerSubjects:
+      - name: vmagent-vmagent      # vmagent's service account
+        namespace: monitoring
+    vmServiceScrape:
+      enabled: true
+  rbac:
+    secretNames:                   # optional: restrict Secret reads to these names
+      - github-token
 ```
-
-### With Ingress
-
-```yaml
-server:
-  ingress:
-    enabled: true
-    className: nginx
-    hosts:
-      - host: sartor-api.example.com
-        paths:
-          - path: /
-            pathType: Prefix
-    tls:
-      - secretName: sartor-api-tls
-        hosts:
-          - sartor-api.example.com
-
-ui:
-  ingress:
-    enabled: true
-    className: nginx
-    hosts:
-      - host: sartor.example.com
-        paths:
-          - path: /
-            pathType: Prefix
-    tls:
-      - secretName: sartor-ui-tls
-        hosts:
-          - sartor.example.com
-```
-
-### Production settings
-
-```yaml
-controller:
-  replicaCount: 2
-  resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 1Gi
-  args:
-    - --metrics-bind-address=:8080
-    - --health-probe-bind-address=:8081
-    - --leader-elect=true
-
-server:
-  replicaCount: 2
-  resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 1Gi
-```
-
-## Uninstallation
 
 ```bash
-helm uninstall sartor -n sartor-system
+helm install sartor . -n sartor-system --create-namespace -f values-staging.yaml
 ```
 
-**Note**: CRDs are not deleted by default. To remove CRDs:
-
-```bash
-kubectl delete crd ateliers.autoscaling.sartorproj.io
-kubectl delete crd fitprofiles.autoscaling.sartorproj.io
-kubectl delete crd tailorings.autoscaling.sartorproj.io
-```
-
-## Getting Started
-
-After installation, you need to:
-
-1. **Create a Git provider secret** with your access token:
-
-```bash
-kubectl create secret generic github-token \
-  --from-literal=token=ghp_xxxxxxxxxxxx \
-  -n sartor-system
-```
-
-2. **Create an Atelier** to configure Sartor:
+Then create the Atelier with the vmselect URL. Controller builds with the sartorproj/sartor VictoriaMetrics fix keep the path prefix and the query string (e.g. `extra_label`) on every request:
 
 ```yaml
 apiVersion: autoscaling.sartorproj.io/v1alpha1
@@ -218,56 +68,126 @@ metadata:
   name: default
 spec:
   prometheus:
-    url: http://prometheus.monitoring:9090
+    url: http://vmselect.monitoring:8481/select/0/prometheus?extra_label=cluster=staging-base-cluster
   gitProvider:
     type: github
     secretRef:
       name: github-token
-      namespace: sartor-system
+      namespace: sartor-system     # must be the release namespace
+  defaultAnalysisWindow: 168h
 ```
 
-3. **Create a FitProfile** for your optimization strategy:
+## RBAC
 
-```yaml
-apiVersion: autoscaling.sartorproj.io/v1alpha1
-kind: FitProfile
-metadata:
-  name: balanced
-  namespace: default
-spec:
-  strategy: percentile
-  displayName: Balanced
-  parameters:
-    percentile: 95
-    requestsBufferPercent: 15
-    limitsBufferPercent: 25
+The controller gets:
+
+- **ClusterRole**: get/list/watch/update/patch on Sartor CRs and their status/finalizers. Read-only on deployments/statefulsets/daemonsets, HPAs and resource quotas. `tokenreviews`/`subjectaccessreviews` create when `controller.metrics.secure=true`.
+- **Role in the release namespace**: `get` on Secrets (optionally limited by `controller.rbac.secretNames`), leader-election leases, and events.
+
+There is no cluster-wide access to Secrets, and no `list`/`watch` on Secrets anywhere. Credentials referenced by an Atelier (`prometheus.secretRef`, `gitProvider.secretRef`, `argocd.secretRef`) must therefore live in the release namespace.
+
+Workload `update`/`patch` and `pods` read are granted only when `controller.oomPatching.enabled=true`. `argoproj.io` Applications access is granted only when `argocd.enabled=true`.
+
+The server, when enabled, gets read-only access to Sartor CRs, `get` on Secrets in the release namespace, and Applications access only when `argocd.enabled=true`.
+
+## Metrics
+
+The controller serves metrics on `:8443` over HTTPS, with Kubernetes authentication and authorization (`--metrics-secure=true`) and a self-signed certificate. Scrapers need:
+
+1. a bearer token whose service account is bound to the `<fullname>-metrics-reader` ClusterRole (`controller.metrics.readerSubjects` creates the binding), and
+2. `tlsConfig.insecureSkipVerify: true` (the default in both monitor objects) or your own CA.
+
+Set `controller.metrics.secure=false` (and usually `controller.metrics.port=8080`) for plain HTTP.
+
+`controller.metrics.serviceMonitor.enabled` creates a prometheus-operator `ServiceMonitor`. `controller.metrics.vmServiceScrape.enabled` creates a VictoriaMetrics operator `VMServiceScrape`. Each needs its operator's CRDs installed.
+
+## CRDs
+
+CRDs are rendered as templates rather than from `crds/`, so `helm upgrade` updates them. With `crds.keep=true` (the default) they are annotated `helm.sh/resource-policy: keep`, so `helm uninstall` never deletes them or the Tailorings stored in them. Set `crds.install=false` if you manage CRDs elsewhere.
+
+A later reinstall must use the same release name and namespace to adopt the kept CRDs. Otherwise delete them first:
+
+```bash
+kubectl delete crd ateliers.autoscaling.sartorproj.io fitprofiles.autoscaling.sartorproj.io tailorings.autoscaling.sartorproj.io
 ```
 
-4. **Create a Tailoring** to optimize a workload:
+`files/crds` must match `config/crd/bases` on `sartorproj/sartor` `main`; CI fails otherwise. To sync:
 
-```yaml
-apiVersion: autoscaling.sartorproj.io/v1alpha1
-kind: Tailoring
-metadata:
-  name: my-app
-  namespace: default
-spec:
-  target:
-    kind: Deployment
-    name: my-app
-  fitProfileRef:
-    name: balanced
-  writeBack:
-    type: raw
-    repository: github.com/myorg/myrepo
-    path: k8s/deployment.yaml
+```bash
+hack/sync-crds.sh ../sartor
+```
+
+## Values
+
+`values.schema.json` validates values. Unknown keys under chart-owned objects are rejected, so a typo such as `oomPatching.enable` fails instead of being ignored.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `namespaceOverride` | Namespace to deploy into | release namespace |
+| `global.imagePullSecrets` | Pull secrets for all pods | `[]` |
+| `crds.install` / `crds.keep` | Render CRDs / keep them on uninstall | `true` / `true` |
+| `rbac.create` | Create (Cluster)Roles and bindings | `true` |
+| `controller.image.repository` | Controller image | `ghcr.io/sartorproj/sartor` |
+| `controller.image.tag` | Image tag | chart `appVersion` |
+| `controller.image.digest` | `sha256:` digest; pins the image | `""` |
+| `controller.replicaCount` | Replicas (more than 1 needs leader election) | `1` |
+| `controller.leaderElection.enabled` | `--leader-elect` | `true` |
+| `controller.oomPatching.enabled` | `--enable-oom-patching` | `false` |
+| `controller.gitWriteback.enabled` | `--enable-git-writeback` | `false` |
+| `controller.analysisInterval` | `--analysis-interval` (Go duration) | `6h` |
+| `controller.metrics.enabled` / `port` / `secure` | Metrics server | `true` / `8443` / `true` |
+| `controller.metrics.readerSubjects` | Service accounts bound to the metrics-reader ClusterRole | `[]` |
+| `controller.metrics.serviceMonitor.*` | prometheus-operator ServiceMonitor | disabled |
+| `controller.metrics.vmServiceScrape.*` | VictoriaMetrics VMServiceScrape | disabled |
+| `controller.log.level` / `encoder` / `development` | zap logging flags | `info` / `json` / `false` |
+| `controller.rbac.secretNames` | Restrict Secret `get` to these names | `[]` (any Secret in the namespace) |
+| `controller.extraArgs` | Additional flags (chart-managed flags are rejected) | `[]` |
+| `controller.resources` | Requests/limits | `100m`/`128Mi` requests, `512Mi` memory limit |
+| `controller.podSecurityContext` / `securityContext` | Non-root UID/GID 65532, read-only root FS, drop ALL, seccomp `RuntimeDefault` | hardened |
+| `controller.nodeSelector` / `tolerations` / `affinity` / `topologySpreadConstraints` / `priorityClassName` | Scheduling | empty |
+| `argocd.enabled` | Grant Argo CD Applications access | `false` |
+| `server.enabled` | Deploy the API server | `false` |
+| `server.apiKeySecretName` | Secret with API keys (release namespace). Without it the API is unauthenticated. | `sartor-api-keys` |
+| `server.cors` | `--enable-cors` | `false` |
+| `server.ingress.*` | Server Ingress | disabled |
+| `ui.enabled` | Deploy the UI (requires `server.enabled`) | `false` |
+| `ui.ingress.*` | UI Ingress | disabled |
+
+See [`values.yaml`](values.yaml) for every option.
+
+### UI caveats
+
+The current `sartor-ui` image is `nginx:alpine`. It starts as root and proxies `/api` to the hard-coded host `http://sartor-server:8080`. Consequences:
+
+- The UI pod does not run with `runAsNonRoot` or a read-only root filesystem. It keeps `CHOWN`, `SETUID` and `SETGID` so the nginx workers can drop privileges.
+- The release must be named `sartor` (or set `fullnameOverride: sartor`) for the UI to reach the server.
+
+## Development
+
+CI (`.github/workflows/ci.yml`) runs:
+
+- `helm lint --strict` for every `ci/*-values.yaml`.
+- `helm template` for every values file on Kubernetes 1.28 and 1.31, followed by:
+  - `hack/check-manifests.py`, which checks that RBAC matches the rendered flags, Secrets are only `get` in a Role, there are no wildcards, and security contexts are hardened;
+  - `kubeconform -strict`, including ServiceMonitor/VMServiceScrape schemas.
+- Rejection tests for invalid values.
+- `ct lint`.
+- A CRD sync check against `sartorproj/sartor` `main`.
+- A kind install, upgrade and uninstall. This validates objects against a real API server, asserts the effective RBAC with `kubectl auth can-i` (`hack/check-rbac.sh`), and checks that CRDs survive uninstall.
+
+Run the same checks locally:
+
+```bash
+for f in ci/*-values.yaml; do
+  helm lint --strict . -f "$f"
+  helm template sartor . -n sartor-system -f "$f" | tee /tmp/out.yaml | hack/check-manifests.py
+  kubeconform -strict -summary -skip CustomResourceDefinition \
+    -schema-location default \
+    -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+    /tmp/out.yaml
+done
 ```
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
-
-## Support
-
-- [Documentation](https://github.com/sartorproj/sartor/tree/main/docs)
-- [Issues](https://github.com/sartorproj/sartor/issues)
+Apache License 2.0. See [LICENSE](LICENSE).
