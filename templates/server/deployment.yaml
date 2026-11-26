@@ -1,25 +1,27 @@
 {{- if .Values.server.enabled }}
+{{- $s := .Values.server }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sartor-server
+  name: {{ include "sartor.server.fullname" . }}
   namespace: {{ include "sartor.namespace" . }}
   labels:
     {{- include "sartor.server.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.server.replicaCount }}
+  replicas: {{ $s.replicaCount }}
   selector:
     matchLabels:
       {{- include "sartor.server.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.server.podAnnotations }}
+      {{- with $s.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "sartor.server.selectorLabels" . | nindent 8 }}
-        {{- with .Values.server.podLabels }}
+        app.kubernetes.io/component: server
+        {{- with $s.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
@@ -28,52 +30,63 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "sartor.server.serviceAccountName" . }}
-      {{- with .Values.global.podSecurityContext }}
+      {{- with $s.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $s.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-      - name: server
-        image: {{ include "sartor.server.image" . }}
-        imagePullPolicy: {{ .Values.server.image.pullPolicy }}
-        {{- with .Values.server.args }}
-        args:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.server.env }}
-        env:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        ports:
-        - name: http
-          containerPort: {{ .Values.server.service.targetPort }}
-          protocol: TCP
-        {{- with .Values.server.resources }}
-        resources:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.server.livenessProbe }}
-        livenessProbe:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.server.readinessProbe }}
-        readinessProbe:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.global.securityContext }}
-        securityContext:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-      {{- with .Values.server.nodeSelector }}
+        - name: server
+          image: {{ include "sartor.image" (dict "image" $s.image "ctx" $) | quote }}
+          imagePullPolicy: {{ $s.image.pullPolicy }}
+          args:
+            - --addr=:8080
+            - --enable-cors={{ $s.cors }}
+            - --api-key-secret-name={{ $s.apiKeySecretName }}
+            - --api-key-secret-namespace={{ include "sartor.namespace" . }}
+            {{- with $s.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $s.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- with $s.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $s.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $s.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $s.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with $s.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.server.affinity }}
+      {{- with $s.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.server.tolerations }}
+      {{- with $s.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $s.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

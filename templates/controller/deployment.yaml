@@ -1,25 +1,29 @@
+{{- include "sartor.validate" . }}
 {{- if .Values.controller.enabled }}
+{{- $c := .Values.controller }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sartor-controller
+  name: {{ include "sartor.controller.fullname" . }}
   namespace: {{ include "sartor.namespace" . }}
   labels:
     {{- include "sartor.controller.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.controller.replicaCount }}
+  replicas: {{ $c.replicaCount }}
   selector:
     matchLabels:
       {{- include "sartor.controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.controller.podAnnotations }}
       annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with $c.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "sartor.controller.selectorLabels" . | nindent 8 }}
-        {{- with .Values.controller.podLabels }}
+        app.kubernetes.io/component: controller
+        {{- with $c.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
@@ -28,55 +32,80 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "sartor.controller.serviceAccountName" . }}
-      {{- with .Values.global.podSecurityContext }}
+      {{- with $c.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $c.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ $c.terminationGracePeriodSeconds }}
       containers:
-      - name: controller
-        image: {{ include "sartor.controller.image" . }}
-        imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
-        {{- with .Values.controller.args }}
-        args:
-          {{- toYaml . | nindent 10 }}
+        - name: manager
+          image: {{ include "sartor.image" (dict "image" $c.image "ctx" $) | quote }}
+          imagePullPolicy: {{ $c.image.pullPolicy }}
+          args:
+            {{- include "sartor.controller.args" . | nindent 12 }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- with $c.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ $c.health.port }}
+              protocol: TCP
+            {{- if $c.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ $c.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          {{- with $c.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with $c.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- with $c.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.controller.env }}
-        env:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        ports:
-        - name: metrics
-          containerPort: {{ .Values.controller.service.metricsPort }}
-          protocol: TCP
-        - name: health
-          containerPort: {{ .Values.controller.service.healthPort }}
-          protocol: TCP
-        {{- with .Values.controller.resources }}
-        resources:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.controller.livenessProbe }}
-        livenessProbe:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.controller.readinessProbe }}
-        readinessProbe:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.global.securityContext }}
-        securityContext:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-      {{- with .Values.controller.nodeSelector }}
+      {{- with $c.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.controller.affinity }}
+      {{- with $c.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.controller.tolerations }}
+      {{- with $c.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $c.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}
