@@ -1,0 +1,7 @@
+# Both write paths on: OOM patching (workload update/patch RBAC) and git write-back.
+controller:
+  oomPatching:
+    enabled: true
+  gitWriteback:
+    enabled: true
+  analysisInterval: 12h

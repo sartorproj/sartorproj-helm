@@ -1,0 +1,18 @@
+# HTTPS metrics with authn/authz, scraped by both operators.
+controller:
+  metrics:
+    readerSubjects:
+      - name: my-vmagent
+        namespace: my-monitoring
+      - name: my-prometheus
+        namespace: my-monitoring
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: my-prometheus
+    vmServiceScrape:
+      enabled: true
+      metricRelabelConfigs:
+        - action: drop
+          source_labels: [__name__]
+          regex: go_gc_.*

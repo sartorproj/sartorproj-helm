@@ -1,0 +1,8 @@
+# Git write-back without OOM patching: no workload write RBAC must be rendered.
+controller:
+  gitWriteback:
+    enabled: true
+  rbac:
+    secretNames:
+      - github-token
+      - metrics-auth
