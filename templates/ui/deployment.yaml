@@ -41,9 +41,23 @@ spec:
         - name: ui
           image: {{ include "sartor.image" (dict "image" $u.image "ctx" $) | quote }}
           imagePullPolicy: {{ $u.image.pullPolicy }}
-          {{- with $u.extraEnv }}
+          {{- $apiUrl := $u.apiUrl | default (printf "http://%s:%d" (include "sartor.server.fullname" .) (int .Values.server.service.port)) }}
+          {{- if or (ne $apiUrl "http://sartor-server:8080") $u.apiKeySecret.name $u.extraEnv }}
           env:
+            {{- if ne $apiUrl "http://sartor-server:8080" }}
+            - name: SARTOR_API_URL
+              value: {{ $apiUrl | quote }}
+            {{- end }}
+            {{- with $u.apiKeySecret.name }}
+            - name: SARTOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $u.apiKeySecret.key }}
+            {{- end }}
+            {{- with $u.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           ports:
             - name: http
@@ -65,6 +79,13 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
       {{- with $u.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

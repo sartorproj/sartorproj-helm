@@ -178,9 +178,10 @@ jobs:
           helm upgrade sartor . -n sartor-system -f ci/oom-writeback-values.yaml --set server.enabled=true
           hack/check-rbac.sh sartor-system sartor true true
 
+      # Without --reset-values, helm upgrade with no values reuses the previous release's values.
       - name: Downgrade to recommend-only revokes workload writes
         run: |
-          helm upgrade sartor . -n sartor-system
+          helm upgrade sartor . -n sartor-system --reset-values
           hack/check-rbac.sh sartor-system sartor false
 
       - name: Uninstall keeps CRDs

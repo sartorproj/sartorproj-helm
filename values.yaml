@@ -348,6 +348,18 @@ ui:
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
+  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port).
+  # Defaults to this release's server Service; only rendered when it differs from the image default http://sartor-server:8080.
+  apiUrl: ""
+
+  # -- Secret holding the API key the UI proxy sends to the server (SARTOR_API_KEY).
+  # The proxy injects the key for every visitor, so protect the UI with ingress-level auth (e.g. oauth2-proxy).
+  apiKeySecret:
+    # -- Secret name in the release namespace (empty: no key is sent)
+    name: ""
+    # -- Key within the Secret
+    key: api-key
+
   # -- Extra environment variables
   extraEnv: []
 
@@ -382,22 +394,26 @@ ui:
     limits:
       memory: 128Mi
 
-  # -- Pod security context. The current UI image is nginx:alpine, which starts as root,
-  # so runAsNonRoot and readOnlyRootFilesystem are not set by default.
+  # -- Pod security context. The UI image is nginx-unprivileged (UID 101) and works under any non-root UID;
+  # /tmp is an emptyDir so the root filesystem can stay read-only.
   podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
     seccompProfile:
       type: RuntimeDefault
 
-  # -- Container security context (see podSecurityContext)
+  # -- Container security context
   securityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
     capabilities:
       drop:
         - ALL
-      add:
-        - CHOWN
-        - SETGID
-        - SETUID
     seccompProfile:
       type: RuntimeDefault
 

@@ -261,6 +261,15 @@
         "enabled": { "type": "boolean" },
         "replicaCount": true,
         "image": { "$ref": "#/definitions/image" },
+        "apiUrl": { "type": "string", "pattern": "^$|^https?://[^/]+$" },
+        "apiKeySecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string", "minLength": 1 }
+          }
+        },
         "extraEnv": true,
         "service": { "$ref": "#/definitions/service" },
         "ingress": { "$ref": "#/definitions/ingress" },

@@ -151,16 +151,23 @@ hack/sync-crds.sh ../sartor
 | `server.cors` | `--enable-cors` | `false` |
 | `server.ingress.*` | Server Ingress | disabled |
 | `ui.enabled` | Deploy the UI (requires `server.enabled`) | `false` |
+| `ui.apiUrl` | `SARTOR_API_URL` override | this release's server Service |
+| `ui.apiKeySecret.name` / `key` | Secret for `SARTOR_API_KEY` (needs ingress-level auth) | `""` / `api-key` |
 | `ui.ingress.*` | UI Ingress | disabled |
 
 See [`values.yaml`](values.yaml) for every option.
 
-### UI caveats
+### UI
 
-The current `sartor-ui` image is `nginx:alpine`. It starts as root and proxies `/api` to the hard-coded host `http://sartor-server:8080`. Consequences:
+The `sartor-ui` image is nginx-unprivileged and serves the app plus a same-origin `/api/` proxy to the server. Its pod runs with:
 
-- The UI pod does not run with `runAsNonRoot` or a read-only root filesystem. It keeps `CHOWN`, `SETUID` and `SETGID` so the nginx workers can drop privileges.
-- The release must be named `sartor` (or set `fullnameOverride: sartor`) for the UI to reach the server.
+- UID 101 and `runAsNonRoot` (any non-root UID works);
+- a read-only root filesystem, with an emptyDir mounted at `/tmp`;
+- all capabilities dropped.
+
+- **API URL.** The chart sets `SARTOR_API_URL` only when the server Service differs from the image default `http://sartor-server:8080`, for example with another release name or port. `ui.apiUrl` overrides it.
+- **API key.** `ui.apiKeySecret.name`/`key` passes `SARTOR_API_KEY` from a Secret. The proxy then adds the key to every request, so anyone who can reach the UI can use the API with that key.
+- **Authentication.** The UI has no login of its own. **Put ingress-level authentication in front of it** (e.g. oauth2-proxy or your ingress controller's auth) before exposing it, and do not expose the server's own Ingress publicly.
 
 ## Development
 

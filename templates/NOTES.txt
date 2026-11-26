@@ -24,10 +24,8 @@ API server
 
 UI
   kubectl port-forward -n {{ $ns }} svc/{{ include "sartor.ui.fullname" . }} {{ .Values.ui.service.port }}
-{{- if ne (include "sartor.server.fullname" .) "sartor-server" }}
-  WARNING: the UI image proxies /api to http://sartor-server:8080, but the server Service is named {{ include "sartor.server.fullname" . }}.
-  Install with release name "sartor" (or fullnameOverride=sartor) for the UI to reach the API.
-{{- end }}
+  The UI has no login of its own{{ if .Values.ui.apiKeySecret.name }} and its proxy adds the API key to every request{{ end }}.
+  Protect it with ingress-level authentication (e.g. oauth2-proxy) before exposing it.
 {{- end }}
 
 Next steps

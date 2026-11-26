@@ -11,7 +11,8 @@ import sys
 import yaml
 
 WORKLOADS = {"deployments", "statefulsets", "daemonsets"}
-HARDENED = {"manager", "server"}
+# Container name -> required UID (None: any non-root UID).
+HARDENED = {"manager": 65532, "server": 65532, "ui": None}
 
 errors = []
 
@@ -62,8 +63,14 @@ for dep in by_kind.get("Deployment", []):
             fail(f"{where}: command must not be set; the image entrypoint is used")
         if not (sc.get("runAsNonRoot") or psc.get("runAsNonRoot")):
             fail(f"{where}: runAsNonRoot is not set")
-        if sc.get("runAsUser", psc.get("runAsUser")) != 65532:
-            fail(f"{where}: runAsUser is not 65532")
+        uid = sc.get("runAsUser", psc.get("runAsUser"))
+        want_uid = HARDENED[c["name"]]
+        if want_uid is not None and uid != want_uid:
+            fail(f"{where}: runAsUser is {uid}, want {want_uid}")
+        if uid == 0:
+            fail(f"{where}: runAsUser is 0")
+        if c["name"] == "ui" and not any(m.get("mountPath") == "/tmp" for m in c.get("volumeMounts", [])):
+            fail(f"{where}: /tmp must be a writable volume for the read-only root filesystem")
         if sc.get("readOnlyRootFilesystem") is not True:
             fail(f"{where}: readOnlyRootFilesystem is not true")
         if sc.get("allowPrivilegeEscalation") is not False:
