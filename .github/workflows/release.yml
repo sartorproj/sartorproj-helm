@@ -89,7 +89,7 @@ jobs:
       - name: Push chart to GitHub Container Registry
         run: |
           for chart in .helm-releases/*.tgz; do
-            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}/charts
           done
 
       - name: Logout from registry

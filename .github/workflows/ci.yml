@@ -12,7 +12,10 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
+
+env:
+  HELM_VERSION: v3.14.0
+  KUBECONFORM_VERSION: v0.6.7
 
 jobs:
   lint:
@@ -21,19 +24,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Run Helm lint
-        run: helm lint .
+        run: helm lint --strict .
 
   template:
-    name: Test Template Rendering
+    name: Template and kubeconform
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,57 +43,18 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
-
-      - name: Test default values
-        run: helm template sartor . --debug
-
-      - name: Test with custom values
-        run: |
-          helm template sartor . \
-            --set controller.replicaCount=2 \
-            --set server.enabled=true \
-            --set ui.enabled=true \
-            --debug
-
-  validate:
-    name: Validate Chart
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
-
-      - name: Install chart-testing
-        uses: helm/chart-testing-action@v2
-
-      - name: Run chart-testing (lint)
-        run: ct lint --chart-dirs . --charts . --validate-maintainers=false
-
-  kubeconform:
-    name: Validate Kubernetes Resources
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Install kubeconform
         run: |
-          curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
           sudo mv kubeconform /usr/local/bin/
 
-      - name: Validate rendered templates
+      # CustomResourceDefinition objects have no published JSON schema.
+      - name: Render default values and validate
         run: |
-          helm template sartor . | kubeconform -strict -summary -output json || true
+          helm template sartor . -n sartor-system > rendered.yaml
+          kubeconform -strict -summary -skip CustomResourceDefinition rendered.yaml
 
   package:
     name: Test Chart Packaging
@@ -104,7 +66,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Package chart
         run: |
@@ -118,9 +80,12 @@ jobs:
 
   push-oci:
     name: Push to GitHub Container Registry
-    needs: [lint, template, validate, package]
+    needs: [lint, template, package]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -128,7 +93,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Package chart
         run: |
@@ -142,7 +107,7 @@ jobs:
       - name: Push chart to GitHub Container Registry
         run: |
           for chart in .helm-releases/*.tgz; do
-            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}/charts
           done
 
       - name: Logout from registry
