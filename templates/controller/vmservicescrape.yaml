@@ -1,0 +1,49 @@
+{{- $m := .Values.controller.metrics }}
+{{- if and .Values.controller.enabled $m.enabled $m.vmServiceScrape.enabled }}
+{{- $vs := $m.vmServiceScrape }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "sartor.controller.fullname" . }}
+  namespace: {{ default (include "sartor.namespace" .) $vs.namespace }}
+  labels:
+    {{- include "sartor.controller.labels" . | nindent 4 }}
+    {{- with $vs.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $vs.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "sartor.namespace" . }}
+  selector:
+    matchLabels:
+      {{- include "sartor.controller.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ $vs.interval }}
+      scrapeTimeout: {{ $vs.scrapeTimeout }}
+      honorLabels: {{ $vs.honorLabels }}
+      {{- if $m.secure }}
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      {{- with $vs.tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- else }}
+      scheme: http
+      {{- end }}
+      {{- with $vs.relabelConfigs }}
+      relabelConfigs:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $vs.metricRelabelConfigs }}
+      metricRelabelConfigs:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

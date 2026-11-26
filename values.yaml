@@ -1,20 +1,21 @@
-# Default values for sartor
-# This is a YAML-formatted file.
+# Default values for sartor.
+# The defaults are a recommend-only (dry-run) install: the controller analyses
+# workloads and records recommendations, but never patches workloads and never
+# touches git. Opt in to each write path explicitly.
 
-# -- Global settings
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name used for resource names
+fullnameOverride: ""
+# -- Deploy into this namespace instead of the release namespace
+namespaceOverride: ""
+# -- Cluster DNS domain, used to build fully qualified Service names
+clusterDomain: cluster.local
+
 global:
-  # -- Namespace to deploy Sartor (created if createNamespace is true)
-  namespace: sartor-system
-  # -- Create the namespace
-  createNamespace: true
   # -- Image pull secrets for all components
   imagePullSecrets: []
-  # -- Pod security context for all components
-  podSecurityContext: {}
-  # -- Container security context for all components
-  securityContext: {}
 
-# -- CRD installation settings
 crds:
   # -- Render the Sartor CRDs (Atelier, FitProfile, Tailoring) from files/crds
   install: true
@@ -23,133 +24,247 @@ crds:
   # -- Extra annotations for the CRDs
   annotations: {}
 
-# -- Controller configuration
+rbac:
+  # -- Create ClusterRoles, Roles and bindings
+  create: true
+
 controller:
-  # -- Enable the controller
+  # -- Deploy the controller
   enabled: true
-  # -- Number of replicas
+  # -- Number of replicas. Only the leader reconciles; extra replicas are hot standbys.
   replicaCount: 1
+
   image:
     # -- Controller image repository
-    repository: ghcr.io/sartorproj/sartor-controller
+    repository: ghcr.io/sartorproj/sartor
+    # -- Image tag (defaults to the chart appVersion)
+    tag: ""
+    # -- Image digest (sha256:...). When set it pins the image; the tag is kept for readability.
+    digest: ""
     # -- Image pull policy
     pullPolicy: IfNotPresent
-    # -- Image tag (defaults to appVersion)
-    tag: ""
-  # -- Service account name
-  serviceAccountName: sartor-controller
-  # -- Controller arguments
-  args:
-    - --metrics-bind-address=:8080
-    - --health-probe-bind-address=:8081
-    - --leader-elect=true
-  # -- Environment variables
-  env:
-    - name: WATCH_NAMESPACE
-      value: ""
-  # -- Resource requests and limits
+
+  # -- Interval between analyses of a Tailoring (--analysis-interval). Go duration, e.g. 6h, 90m.
+  analysisInterval: 6h
+
+  oomPatching:
+    # -- Let the controller bump memory limits of OOM-killed containers (--enable-oom-patching).
+    # Also grants pods read and deployments/statefulsets/daemonsets update/patch cluster-wide.
+    enabled: false
+
+  gitWriteback:
+    # -- Let the controller open GitOps pull requests (--enable-git-writeback).
+    # Needs no extra cluster RBAC: writes go to the git provider, credentials come from the Atelier secret.
+    enabled: false
+
+  leaderElection:
+    # -- Enable leader election (--leader-elect). Required when replicaCount > 1.
+    enabled: true
+
+  metrics:
+    # -- Serve controller metrics (--metrics-bind-address). When false the metrics server is disabled.
+    enabled: true
+    # -- Metrics port
+    port: 8443
+    # -- Serve metrics over HTTPS with Kubernetes authn/authz (--metrics-secure).
+    # Scrapers then need a bearer token bound to the metrics-reader ClusterRole (see readerSubjects).
+    secure: true
+    # -- Subjects bound to the <fullname>-metrics-reader ClusterRole, e.g. the vmagent or Prometheus service account.
+    # Each item is a ServiceAccount: {name: my-vmagent, namespace: my-monitoring}
+    readerSubjects: []
+
+    serviceMonitor:
+      # -- Create a prometheus-operator ServiceMonitor (monitoring.coreos.com/v1)
+      enabled: false
+      # -- Namespace for the ServiceMonitor (defaults to the release namespace)
+      namespace: ""
+      # -- Extra labels, e.g. the label your Prometheus selects on
+      labels: {}
+      # -- Extra annotations
+      annotations: {}
+      # -- Scrape interval
+      interval: 30s
+      # -- Scrape timeout
+      scrapeTimeout: 10s
+      # -- Keep the target's labels on conflict
+      honorLabels: false
+      # -- TLS config for the HTTPS endpoint. The default self-signed certificate needs insecureSkipVerify.
+      tlsConfig:
+        insecureSkipVerify: true
+      # -- Relabelings applied before scraping
+      relabelings: []
+      # -- Relabelings applied to scraped samples
+      metricRelabelings: []
+
+    vmServiceScrape:
+      # -- Create a VictoriaMetrics operator VMServiceScrape (operator.victoriametrics.com/v1beta1)
+      enabled: false
+      # -- Namespace for the VMServiceScrape (defaults to the release namespace)
+      namespace: ""
+      # -- Extra labels, e.g. the label your VMAgent selects on
+      labels: {}
+      # -- Extra annotations
+      annotations: {}
+      # -- Scrape interval
+      interval: 30s
+      # -- Scrape timeout
+      scrapeTimeout: 10s
+      # -- Keep the target's labels on conflict
+      honorLabels: false
+      # -- TLS config for the HTTPS endpoint. The default self-signed certificate needs insecureSkipVerify.
+      tlsConfig:
+        insecureSkipVerify: true
+      # -- Relabel configs applied before scraping
+      relabelConfigs: []
+      # -- Relabel configs applied to scraped samples
+      metricRelabelConfigs: []
+
+  health:
+    # -- Health probe port (--health-probe-bind-address)
+    port: 8081
+
+  log:
+    # -- Log level (--zap-log-level): debug, info, error, or an integer verbosity
+    level: info
+    # -- Log encoder (--zap-encoder): json or console
+    encoder: json
+    # -- Development mode logging (--zap-devel)
+    development: false
+
+  # -- Extra controller arguments, appended after the chart-managed ones
+  extraArgs: []
+  # -- Extra environment variables
+  extraEnv: []
+  # -- Extra volumes
+  extraVolumes: []
+  # -- Extra volume mounts
+  extraVolumeMounts: []
+
+  rbac:
+    # -- Restrict the release-namespace secrets Role to these Secret names (Atelier prometheus/git/argocd secretRefs).
+    # Empty allows get on any Secret in the release namespace. Never list/watch, never cluster-wide.
+    secretNames: []
+
+  serviceAccount:
+    # -- Create the controller service account
+    create: true
+    # -- Service account name (defaults to <fullname>-controller)
+    name: ""
+    # -- Service account annotations, e.g. for workload identity
+    annotations: {}
+
+  service:
+    # -- Metrics Service type
+    type: ClusterIP
+    # -- Metrics Service annotations
+    annotations: {}
+
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
     limits:
-      cpu: 500m
       memory: 512Mi
-  # -- Node selector
-  nodeSelector: {}
-  # -- Tolerations
-  tolerations: []
-  # -- Affinity rules
-  affinity: {}
-  # -- Pod annotations
-  podAnnotations: {}
-  # -- Pod labels
-  podLabels: {}
-  # -- Health probe configuration
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
   livenessProbe:
     httpGet:
       path: /healthz
-      port: 8081
+      port: health
     initialDelaySeconds: 15
     periodSeconds: 20
   readinessProbe:
     httpGet:
       path: /readyz
-      port: 8081
+      port: health
     initialDelaySeconds: 5
     periodSeconds: 10
-  # -- Service configuration
-  service:
-    # -- Service type
-    type: ClusterIP
-    # -- Health port
-    healthPort: 8081
-    # -- Metrics port
-    metricsPort: 8080
 
-# -- Server (API) configuration
-server:
-  # -- Enable the server
-  enabled: true
-  # -- Number of replicas
-  replicaCount: 1
-  image:
-    # -- Server image repository
-    repository: ghcr.io/sartorproj/sartor-server
-    # -- Image pull policy
-    pullPolicy: IfNotPresent
-    # -- Image tag (defaults to appVersion)
-    tag: ""
-  # -- Service account name
-  serviceAccountName: sartor-server
-  # -- Server arguments
-  args:
-    - --addr=0.0.0.0:8080
-    - --enable-cors=true
-  # -- Environment variables
-  env: []
-  # -- Resource requests and limits
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
+  # -- Seconds to wait for graceful shutdown
+  terminationGracePeriodSeconds: 10
+  # -- Priority class name
+  priorityClassName: ""
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations
   tolerations: []
   # -- Affinity rules
   affinity: {}
+  # -- Topology spread constraints
+  topologySpreadConstraints: []
   # -- Pod annotations
   podAnnotations: {}
   # -- Pod labels
   podLabels: {}
-  # -- Health probe configuration
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: 8080
-    initialDelaySeconds: 10
-    periodSeconds: 30
-  readinessProbe:
-    httpGet:
-      path: /readyz
-      port: 8080
-    initialDelaySeconds: 5
-    periodSeconds: 10
-  # -- Service configuration
+
+argocd:
+  # -- Grant read on argoproj.io Applications (and update/patch for refreshes) to the controller and server.
+  # Only needed when an Atelier sets spec.argocd.enabled.
+  enabled: false
+
+server:
+  # -- Deploy the REST API server (used by the UI and integrations)
+  enabled: false
+  # -- Number of replicas
+  replicaCount: 1
+
+  image:
+    # -- Server image repository
+    repository: ghcr.io/sartorproj/sartor-server
+    # -- Image tag (defaults to the chart appVersion)
+    tag: ""
+    # -- Image digest (sha256:...)
+    digest: ""
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+
+  # -- Name of the Secret (in the release namespace) holding API keys. Without it the API is unauthenticated.
+  apiKeySecretName: sartor-api-keys
+  # -- Send CORS headers (--enable-cors). Needed when the UI is served from another origin.
+  cors: false
+
+  # -- Extra server arguments
+  extraArgs: []
+  # -- Extra environment variables
+  extraEnv: []
+
+  serviceAccount:
+    # -- Create the server service account
+    create: true
+    # -- Service account name (defaults to <fullname>-server)
+    name: ""
+    # -- Service account annotations
+    annotations: {}
+
   service:
     # -- Service type
     type: ClusterIP
-    # -- HTTP port
+    # -- Service port
     port: 8080
-    # -- Target port
-    targetPort: 8080
-  # -- Ingress configuration
+    # -- Service annotations
+    annotations: {}
+
   ingress:
-    # -- Enable ingress
+    # -- Expose the server through an Ingress
     enabled: false
     # -- Ingress class name
     className: ""
@@ -161,68 +276,109 @@ server:
         paths:
           - path: /
             pathType: Prefix
-    # -- TLS configuration
+    # -- Ingress TLS
     tls: []
 
-# -- UI configuration
-ui:
-  # -- Enable the UI
-  enabled: true
-  # -- Number of replicas
-  replicaCount: 1
-  image:
-    # -- UI image repository
-    repository: ghcr.io/sartorproj/sartor-ui
-    # -- Image pull policy
-    pullPolicy: IfNotPresent
-    # -- Image tag (defaults to appVersion)
-    tag: ""
-  # -- Environment variables
-  env:
-    - name: VITE_API_URL
-      value: ""  # Will be set via template if server is enabled
-  # -- Resource requests and limits
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
     limits:
-      cpu: 200m
       memory: 256Mi
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  # -- Priority class name
+  priorityClassName: ""
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations
   tolerations: []
   # -- Affinity rules
   affinity: {}
+  # -- Topology spread constraints
+  topologySpreadConstraints: []
   # -- Pod annotations
   podAnnotations: {}
   # -- Pod labels
   podLabels: {}
-  # -- Health probe configuration
-  livenessProbe:
-    httpGet:
-      path: /
-      port: 5173
-    initialDelaySeconds: 10
-    periodSeconds: 30
-  readinessProbe:
-    httpGet:
-      path: /
-      port: 5173
-    initialDelaySeconds: 5
-    periodSeconds: 10
-  # -- Service configuration
+
+ui:
+  # -- Deploy the web UI (github.com/sartorproj/sartor-ui). Requires server.enabled.
+  enabled: false
+  # -- Number of replicas
+  replicaCount: 1
+
+  image:
+    # -- UI image repository
+    repository: ghcr.io/sartorproj/sartor-ui
+    # -- Image tag (defaults to the chart appVersion)
+    tag: ""
+    # -- Image digest (sha256:...)
+    digest: ""
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+
+  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port), set as a plain env value on the UI Deployment.
+  # The image has no default and answers 502 without it. Defaults to this release's server Service, fully qualified:
+  # http://<fullname>-server.<namespace>.svc.<clusterDomain>:<server.service.port>
+  apiUrl: ""
+
+  # -- API key the UI proxy sends to the server (SARTOR_API_KEY). Optional: without one no key is sent.
+  # The proxy adds the key server-side for every visitor. Deploy the UI on a private network or behind an
+  # authenticating proxy; the server-side key proxy gives the API to anyone who can reach the UI. Never expose it publicly.
+  apiKey:
+    # -- Use this existing Secret in the release namespace (takes precedence over value)
+    existingSecret: ""
+    # -- Key within existingSecret
+    existingSecretKey: api-key
+    # -- Create a Secret with this key. Prefer existingSecret so the key stays out of values files.
+    value: ""
+
+  # -- Extra environment variables
+  extraEnv: []
+
   service:
     # -- Service type
     type: ClusterIP
-    # -- HTTP port
+    # -- Service port
     port: 5173
-    # -- Target port
-    targetPort: 5173
-  # -- Ingress configuration
+    # -- Service annotations
+    annotations: {}
+
   ingress:
-    # -- Enable ingress
+    # -- Expose the UI through an Ingress
     enabled: false
     # -- Ingress class name
     className: ""
@@ -234,17 +390,63 @@ ui:
         paths:
           - path: /
             pathType: Prefix
-    # -- TLS configuration
+    # -- Ingress TLS
     tls: []
 
-# -- RBAC configuration
-rbac:
-  # -- Create RBAC resources
-  create: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 
-# -- Service account configuration
-serviceAccount:
-  # -- Create service accounts
-  create: true
-  # -- Annotations to add to the service accounts
-  annotations: {}
+  # -- Pod security context. The UI image is nginx-unprivileged (UID 101) and works under any non-root UID;
+  # /tmp is an emptyDir so the root filesystem can stay read-only.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+
+  # -- Container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  # -- Priority class name
+  priorityClassName: ""
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Topology spread constraints
+  topologySpreadConstraints: []
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}

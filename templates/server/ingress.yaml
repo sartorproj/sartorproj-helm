@@ -1,8 +1,9 @@
 {{- if and .Values.server.enabled .Values.server.ingress.enabled }}
+{{- $fullname := include "sartor.server.fullname" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sartor-server
+  name: {{ $fullname }}
   namespace: {{ include "sartor.namespace" . }}
   labels:
     {{- include "sartor.server.labels" . | nindent 4 }}
@@ -11,12 +12,12 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.server.ingress.className }}
-  ingressClassName: {{ .Values.server.ingress.className }}
+  {{- with .Values.server.ingress.className }}
+  ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.server.ingress.tls }}
+  {{- with .Values.server.ingress.tls }}
   tls:
-    {{- range .Values.server.ingress.tls }}
+    {{- range . }}
     - hosts:
         {{- range .hosts }}
         - {{ . | quote }}
@@ -34,7 +35,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: sartor-server
+                name: {{ $fullname }}
                 port:
                   name: http
           {{- end }}

@@ -23,3 +23,7 @@
 .vscode/
 # Documentation
 README.md
+# Repository tooling
+.github/
+ci/
+hack/
