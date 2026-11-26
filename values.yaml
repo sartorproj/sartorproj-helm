@@ -350,7 +350,7 @@ ui:
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
-  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port), stored in the UI ConfigMap.
+  # -- Upstream the UI's nginx proxies /api/ to (SARTOR_API_URL, scheme://host:port), set as a plain env value on the UI Deployment.
   # The image has no default and answers 502 without it. Defaults to this release's server Service, fully qualified:
   # http://<fullname>-server.<namespace>.svc.<clusterDomain>:<server.service.port>
   apiUrl: ""
